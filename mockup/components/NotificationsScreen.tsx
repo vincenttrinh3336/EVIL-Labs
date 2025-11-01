@@ -1,6 +1,6 @@
-import { motion } from "motion/react";
-import { Card } from "./ui/card";
-import { Badge } from "./ui/badge";
+import { motion } from "framer-motion";
+import { Card } from "@/lib/ui";
+
 import { ArrowLeft, Bell, AlertCircle, CheckCircle, Info, Trash2 } from "lucide-react";
 
 interface NotificationsScreenProps {

@@ -1,9 +1,6 @@
 import { useState } from "react";
-import { motion } from "motion/react";
-import { Button } from "./ui/button";
-import { Card } from "./ui/card";
-import { Slider } from "./ui/slider";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { motion } from "framer-motion";
+import { Button, Card, Slider, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/lib/ui";
 import { Home, Video, Heart, Bell, Utensils, Clock, BarChart3, Wifi, Settings } from "lucide-react";
 
 interface HomeDashboardProps {

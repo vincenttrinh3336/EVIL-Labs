@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { motion } from "motion/react";
-import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
-import { ArrowLeft, Video, Camera, Mic, MicOff, Volume2, VolumeX, Radio } from "lucide-react";
+import { motion } from "framer-motion";
+import { Button, Badge } from "@/lib/ui";
+import { ArrowLeft, Video, Camera, Volume2, VolumeX, Radio } from "lucide-react";
 
 interface LiveFeedScreenProps {
   onBack: () => void;

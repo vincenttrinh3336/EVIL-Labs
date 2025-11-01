@@ -1,6 +1,5 @@
-import { motion } from "motion/react";
-import { Card } from "./ui/card";
-import { Switch } from "./ui/switch";
+import { motion } from "framer-motion";
+import { Card, Switch } from "@/lib/ui";
 import { ArrowLeft, Wifi, Bell, Moon, Globe, HelpCircle, Mail, Shield, ChevronRight } from "lucide-react";
 
 interface SettingsScreenProps {

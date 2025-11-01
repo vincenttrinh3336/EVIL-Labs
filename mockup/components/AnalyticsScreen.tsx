@@ -1,6 +1,5 @@
-import { motion } from "motion/react";
-import { Card } from "./ui/card";
-import { Button } from "./ui/button";
+import { motion } from "framer-motion";
+import { Card, Button } from "@/lib/ui";
 import { ArrowLeft, TrendingUp, Download, Calendar } from "lucide-react";
 import {
   LineChart,
@@ -136,7 +135,7 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) =>
+                  label={({ percent }) =>
                     `${(percent * 100).toFixed(0)}%`
                   }
                   outerRadius={80}

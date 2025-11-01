@@ -1,5 +1,5 @@
-import { motion } from "motion/react";
-import { Button } from "./ui/button";
+import { motion } from "framer-motion";
+import { Button } from "@/lib/ui";
 
 interface SplashScreenProps {
   onGetStarted: () => void;

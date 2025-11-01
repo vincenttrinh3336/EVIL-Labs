@@ -1,73 +1,168 @@
-# React + TypeScript + Vite
+# Pet Feeder App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern React web application for managing smart pet feeders. This app allows you to monitor, schedule, and control your pet's feeding remotely with a beautiful, intuitive interface.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- 🍽️ **Smart Feeding Control** - Dispense food remotely with custom portions
+- 📹 **Live Video Feed** - Watch your pets eat in real-time
+- 📊 **Analytics Dashboard** - Track feeding patterns and nutrition data
+- 🐕 **Pet Profiles** - Manage multiple pets with RFID tag support
+- 🔔 **Smart Notifications** - Get alerts for feeding times and low food levels
+- ⚙️ **Device Settings** - Configure Wi-Fi, firmware updates, and preferences
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React 18** with TypeScript
+- **Vite** for fast development and building
+- **Tailwind CSS** for styling
+- **Framer Motion** for smooth animations
+- **shadcn/ui** for beautiful UI components
+- **Recharts** for data visualization
+- **Lucide React** for icons
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- Node.js 18+ 
+- npm or yarn
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Installation
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd pet-feeder-app
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Start the development server**
+   ```bash
+   npm run dev
+   ```
+
+4. **Open your browser**
+   Navigate to `http://localhost:5173` to see the app running.
+
+### Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+
+## Project Structure
+
+```
+pet-feeder-app/
+├── src/
+│   ├── main.tsx          # App entry point
+│   └── index.css         # Global styles
+├── components/
+│   ├── ui/               # Reusable UI components (shadcn/ui)
+│   ├── SplashScreen.tsx  # Welcome screen
+│   ├── OnboardingScreens.tsx # App introduction
+│   ├── LoginScreen.tsx   # Authentication
+│   ├── HomeDashboard.tsx # Main dashboard
+│   ├── LiveFeedScreen.tsx # Video feed
+│   ├── PetProfilesScreen.tsx # Pet management
+│   ├── NotificationsScreen.tsx # Alerts
+│   ├── SettingsScreen.tsx # App settings
+│   └── AnalyticsScreen.tsx # Data visualization
+├── styles/
+│   └── globals.css       # Additional global styles
+├── App.tsx               # Main app component
+└── index.html           # HTML template
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Features Overview
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 🏠 Home Dashboard
+- Live video feed preview
+- Quick stats (last feeding, next scheduled, food remaining)
+- Quick actions for scheduling and analytics
+- Floating feed button for immediate dispensing
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 📹 Live Feed
+- Real-time video streaming
+- Pet detection with RFID tag recognition
+- Recording and snapshot capabilities
+- Audio controls
+
+### 🐕 Pet Profiles
+- Multiple pet management
+- Individual feeding schedules
+- Weight and food type tracking
+- Feeding history charts
+
+### 📊 Analytics
+- Weekly feeding frequency charts
+- Time distribution analysis
+- 30-day consumption trends
+- Exportable PDF reports
+
+### 🔔 Notifications
+- Real-time feeding alerts
+- Low food reservoir warnings
+- System updates and reminders
+- Swipe-to-delete functionality
+
+### ⚙️ Settings
+- Wi-Fi and device configuration
+- App preferences (notifications, dark mode)
+- Support and help center
+- Firmware updates
+
+## Customization
+
+### Colors
+The app uses a consistent color palette defined in the Tailwind config:
+- Primary: `#5C6BC0` (Indigo)
+- Secondary: `#FFB74D` (Orange)
+- Success: `#81C784` (Green)
+- Info: `#64B5F6` (Blue)
+
+### Adding New Features
+1. Create new components in the `components/` directory
+2. Add routing logic in `App.tsx`
+3. Update the navigation in `HomeDashboard.tsx`
+
+## Deployment
+
+### Build for Production
+```bash
+npm run build
 ```
+
+The built files will be in the `dist/` directory, ready for deployment to any static hosting service.
+
+### Deploy to Vercel
+```bash
+npm install -g vercel
+vercel
+```
+
+### Deploy to Netlify
+1. Build the project: `npm run build`
+2. Upload the `dist/` folder to Netlify
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/new-feature`
+3. Commit your changes: `git commit -am 'Add new feature'`
+4. Push to the branch: `git push origin feature/new-feature`
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For support and questions, please open an issue on GitHub or contact the development team.
