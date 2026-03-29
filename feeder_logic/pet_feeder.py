@@ -1,10 +1,24 @@
 #!/usr/bin/env python3
+
+# General dependencies for pet feeder script
 from gpiozero import DistanceSensor, Servo, MotionSensor
 from time import sleep, time
+from datetime import datetime, timedelta
 from signal import pause
 from threading import Thread, Lock
 
-# Dependencies for pet detection module
+# Dependencies for receival of schedule updates (FastAPI, sqlite3)
+import sqlite3
+from fastapi import FastAPI, HTTPException  # pip install fastapi uvicorn
+from pydantic import BaseModel
+
+
+# Dependencies for notifications using Firebase
+import firebase_admin   # pip install firebase-admin
+from firebase_admin import credentials, messaging
+
+
+# Dependencies for computer vision functionality
 """
 Raspberry Pi Pet Detection Module
 Real-time cat and dog detection using TFLite and Pi Camera
@@ -439,17 +453,38 @@ def levelCheck():
     # Get the distance in meters and convert to centimeters
     distance_cm = sensor.distance * 100
     print('Distance: {:.2f} cm'.format(distance_cm))
+
     if distance_cm > 6:
-        lowfood = 1
-        print('Food low. please refill NOW')    # SEND to app
-    else: lowfood = 0
+        if not lowfood: # Only notify once when it FIRST goes low
+            send_push_notification(
+                title="Feeder Alert! ⚠️",
+                body="Food level is low. Please refill the container soon!"
+            )
+            update_db_food_status("low")
+        lowfood = True
+    else:
+        if lowfood: # Reset status if you refilled it
+            update_db_food_status("normal")
+        lowfood = False
 
 
-def dispenseFood(angle, wait_time=4.0):
+def getSchedule():
+    conn = sqlite3.connect("feeder_schedule.db")
+    cursor = conn.execute("SELECT time, pet, seconds FROM schedules")
+    data = cursor.fetchall()
+    conn.close()
+    return data # list of tuples, (Time, Pet name, Seconds)
+
+
+def dispenseFood(time_str, pet, duration):
+    global cam_state, servo_angle
+    feed_time = time_str
+    pet_name = pet
+    wait_time = duration
     print("Dispensing food...")
     #Move servo to a given angle (0–180), wait, then return to 0.
     # Convert angle (0–180) to gpiozero range (-1 to 1)
-    value = (angle / 90) - 1  # 0°=-1, 90°=0, 180°=1
+    value = (servo_angle / 90) - 1  # 0°=-1, 90°=0, 180°=1
 
     # Move to target angle
     servo.value = value
@@ -461,47 +496,69 @@ def dispenseFood(angle, wait_time=4.0):
 
     # Stop sending signal (prevents jitter)
     servo.detach()
-    print("Food dispensed!")    # SEND to feeding log
+    print(f"{feed_time} feeding for {pet_name} dispensed!")    # NOTIFY APP
+
+    # 1. Log to Database
+    log_feeding(time_str, pet, duration)
+
+    # 2. Notify App via Firebase
+    send_push_notification(
+        title="Food Dispensed! 🥣",
+        body=f"{pet_name} has been fed their {feed_time} meal.",
+        data_payload={"action": "refresh_logs"} # Tells the app to update the list
+    )
 
     levelCheck()
-    activateVision()
+    if cam_state:
+        activateVision()
 
 
 def onMotion():
-    global lock
+    global lock, cam_state
     print("Motion detected!")
     
     with lock:
         active = vision_active
     
-    if not active:
+    if not active and cam_state:
         activateVision()
 
 
 def schedulerLoop():
-    global feeding_times
+    global last_dispense_time
     while True:
         now = time.strftime("%H:%M")
         
-        if now in feeding_times:
-            dispenseFood()
-            sleep(60)  # prevent duplicate trigger
+        if now != last_dispense_time:
+            # Freshly fetch the list from the DB in case the app changed something
+            schedules = getSchedule()
+            for time_str, pet, duration in schedules:
+                if time_str == now:
+                    dispenseFood(time_str, pet, duration)
+                    last_dispense_time = now
         
-        sleep(10)
+        time.sleep(10)
+
+
+# For user to change camera state
+class CameraToggle(BaseModel):
+    enabled: bool
+
 
 def activateVision():
     global vision_active, vision_stop_time, lock, cam_state
     
-    if cam_state == True:
+    if cam_state:
         with lock:
             vision_active = True
-            vision_stop_time = time() + (30 * 60)  # 30 minutes
+            vision_stop_time = time.time() + (30 * 60)  # 30 minutes
     
         print("Vision activated for 30 minutes")
+    else: print("CV deactivated by user")
 
 
 def run_detection_loop(camera, detector, args, stop_time):
-    global vision_stop_time, lock
+    global vision_stop_time, lock, cam_state
     # Initialize local loop variables
     fps_counter = 0
     fps_start_time = time.time()
@@ -518,14 +575,19 @@ def run_detection_loop(camera, detector, args, stop_time):
     try:
         while True:
             # Check if we should still be running
-            current_time = time()
+            current_time = time.time()
 
             # We check the GLOBAL stop_time in case activateVision() updated it
             with lock:
                 current_stop_limit = vision_stop_time
+                current_cam_state = cam_state
 
             if current_time > current_stop_limit:
                 print("30 minutes elapsed. Closing detection loop...")
+                break # This exits the function and returns to visionLoop's 'finally' block
+
+            if current_cam_state == False:
+                print("CV deactivated by user. Closing detection loop...")
                 break # This exits the function and returns to visionLoop's 'finally' block
 
             # Capture frame
@@ -581,14 +643,15 @@ def run_detection_loop(camera, detector, args, stop_time):
 
 
 def visionLoop(detector, args):
-    global vision_active, vision_stop_time, lock
+    global vision_active, vision_stop_time, lock, cam_state
 
     while True:
         with lock:
             active = vision_active
             stop_time = vision_stop_time
+            cam = cam_state
 
-        if active:
+        if active and cam:
             print(f"Vision Active. Target stop time: {time.ctime(stop_time)}")
             try:
                 # 1. SETUP: Start camera ONLY when needed
@@ -616,21 +679,199 @@ def visionLoop(detector, args):
                     vision_active = False
                 print("Vision deactivated")
 
-        sleep(1) # Poll every second to save CPU
+        time.sleep(1) # Poll every second to save CPU
+
+
+# Define the structure for the React Native app to send a feeding schedule instance
+class ScheduleEntry(BaseModel):
+    time_of_day: str  # e.g., "14:30"
+    pet_name: str
+    seconds: int
+
+# Database where feeedings, logs, and variable statuses are stored
+def init_db():
+    global DB_PATH
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute('''CREATE TABLE IF NOT EXISTS schedules 
+                    (id INTEGER PRIMARY KEY, time TEXT, pet TEXT, seconds INTEGER)''')
+    conn.execute('CREATE TABLE IF NOT EXISTS status (key TEXT PRIMARY KEY, value TEXT)')
+    conn.execute('INSERT OR IGNORE INTO status (key, value) VALUES ("food_level", "normal")')
+    conn.execute('''CREATE TABLE IF NOT EXISTS feeding_log 
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                     actual_timestamp DATETIME, 
+                     scheduled_time TEXT, 
+                     pet_name TEXT, 
+                     duration INTEGER)''')
+    conn.commit()
+    conn.close()
+
+# Change food level status depending on result of levelCheck()
+def update_db_food_status(status):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute('UPDATE status SET value = ? WHERE key = "food_level"', (status,))
+    conn.commit()
+    conn.close()
+
+
+# Log feeding instance into database
+def log_feeding(time_str, pet, duration):
+    conn = sqlite3.connect(DB_PATH)
+    # Log the exact moment it happened + the scheduled info
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute("INSERT INTO feeding_log (actual_timestamp, scheduled_time, pet_name, duration) VALUES (?, ?, ?, ?)",
+                 (now, time_str, pet, duration))
+    
+    # Optional: Auto-delete logs older than 7 days to keep the DB clean
+    seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute("DELETE FROM feeding_log WHERE actual_timestamp < ?", (seven_days_ago,))
+    
+    conn.commit()
+    conn.close()
+
+
+# Update cam_state to match database value upon startup
+def load_settings():
+    global cam_state
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.execute('SELECT value FROM status WHERE key = "camera_enabled"')
+    row = cursor.fetchone()
+    if row:
+        cam_state = (row[0] == 'True') # Convert string back to boolean
+    conn.close()
+
+
+@app.post("/add-schedule")  # Check if app is initialized in proper scope
+async def add_schedule(entry: ScheduleEntry):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("INSERT INTO schedules (time, pet, seconds) VALUES (?, ?, ?)",
+                 (entry.time_of_day, entry.pet_name, entry.seconds))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
+
+
+@app.get("/get-schedules")
+async def get_schedules():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.execute("SELECT time, pet, seconds FROM schedules")
+    rows = cursor.fetchall() # Returns the list of tuples
+    conn.close()
+    return rows
+
+
+# To change cam_state based on user update
+@app.post("/set-camera")
+async def set_camera(status: CameraToggle):
+    global cam_state
+    
+    # 1. Update the variable with the lock to ensure the vision loop sees it
+    with lock:
+        cam_state = status.enabled
+    
+    # 2. Persist to database (using the existing status table)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute('UPDATE status SET value = ? WHERE key = "camera_enabled"', 
+                 (str(status.enabled),))
+    conn.commit()
+    conn.close()
+    
+    return {"message": f"Camera state set to {status.enabled}"}
+
+
+# Provide cam_state and vision_active variables to the server
+@app.get("/get-status")
+async def get_status():
+    global cam_state, vision_active, lock
+    
+    with lock:
+        return {
+            "cam_state": cam_state,
+            "vision_active": vision_active
+        }
+    
+# GET request that returns the last 7 days of feeding history entries
+@app.get("/feeding-logs")
+async def get_logs():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.execute("""
+        SELECT id, scheduled_time, pet_name, duration, actual_timestamp 
+        FROM feeding_log 
+        ORDER BY actual_timestamp DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # Convert tuples to list of dicts for easy JSON parsing in React Native
+    return [
+        {
+            "id": r[0],
+            "time": r[1], 
+            "pet": r[2], 
+            "duration": r[3], 
+            "date": r[4]
+        } for r in rows
+    ]
+
+
+# DELETE request to delete a log
+@app.delete("/delete-log/{log_id}")
+async def delete_log(log_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM feeding_log WHERE id = ?", (log_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "deleted"}
+
+
+def send_push_notification(title, body, data_payload=None):
+    """
+    Sends a flexible push notification via Firebase.
+    :param title: The bold header of the notification
+    :param body: The main message text
+    :param data_payload: Optional dictionary for app logic (e.g., {'type': 'feed_event'})
+    """
+    message = messaging.Message(
+        notification=messaging.Notification(
+            title=title,
+            body=body,
+        ),
+        data=data_payload, # Useful for triggering app behavior
+        topic="feeder_updates",
+    )
+    
+    try:
+        response = messaging.send(message)
+        print(f"Successfully sent [{title}]: {response}")
+    except Exception as e:
+        print(f"Failed to send notification: {e}")
 
 
 # MAIN FUNCTION
 def main():
-    global feeding_times, lowfood, vision_active, vision_stop_time, sensor, servo, pir, lock, cam_state
+    # Initializations
+    global feeding_times, lowfood, vision_active, vision_stop_time, sensor, servo, pir, lock, cam_state, last_dispense_time, servo_angle
 
-    feeding_times = ["08:00", "18:00"] # Sample feeding times
-    lowfood = 0
-    vision_active = False
+    feeding_times = [("08:00", "Chai", "4"), ("12:00", "Scout", "5"), ("16:00", "Cherry", "3")] # Sample feeding times, (Time, Pet name, Seconds)
+    lowfood = False # True if food level is low, else False
+    vision_active = False   # True if CV model should be running (depends on cam_state)
     vision_stop_time = 0
     sensor = DistanceSensor(echo=24, trigger=23) # Adjust pin numbers if needed
     servo = Servo(18) # Initialize servo on GPIO 18
-    pir = MotionSensor(4) # Initialize PIR motion sensor to GPIO 4
+    pir = MotionSensor(17) # Initialize PIR motion sensor to GPIO 17
     lock = Lock()
+    cam_state = True
+    last_dispense_time = ""
+    servo_angle = 90
+
+    # Initializations for FastAPI and DB
+    global app, DB_PATH
+    app = FastAPI()
+    DB_PATH = "feeder_schedule.db"
+
+    # Initializations for notifications
+    global cred
+    cred = credentials.Certificate("path/to/serviceAccountKey.json")    # Get json from firebase console
+    firebase_admin.initialize_app(cred)
 
     """Setting up Computer Vision"""
     import argparse
@@ -661,6 +902,9 @@ def main():
         print(f"Unexpected error loading model: {e}")
         return
 
+    init_db()
+    load_settings()
+
     # Start background threads
     Thread(target=visionLoop, args=(detector, args), daemon=True).start()
     Thread(target=schedulerLoop, daemon=True).start()
@@ -674,6 +918,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
 
