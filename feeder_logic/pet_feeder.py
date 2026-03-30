@@ -14,8 +14,13 @@ from pydantic import BaseModel
 
 
 # Dependencies for notifications using Firebase
+import os
 import firebase_admin   # pip install firebase-admin
 from firebase_admin import credentials, messaging
+
+# Get the directory where the script is located
+base_dir = os.path.dirname(os.path.abspath(__file__))
+key_path = os.path.join(base_dir, "serviceAccountKey.json")
 
 
 # Dependencies for computer vision functionality
@@ -503,7 +508,7 @@ def dispenseFood(time_str, pet, duration):
 
     # 2. Notify App via Firebase
     send_push_notification(
-        title="Food Dispensed! 🥣",
+        title="Food Dispensed!",
         body=f"{pet_name} has been fed their {feed_time} meal.",
         data_payload={"action": "refresh_logs"} # Tells the app to update the list
     )
@@ -870,7 +875,7 @@ def main():
 
     # Initializations for notifications
     global cred
-    cred = credentials.Certificate("path/to/serviceAccountKey.json")    # Get json from firebase console
+    cred = credentials.Certificate(key_path)    # Get json from firebase console
     firebase_admin.initialize_app(cred)
 
     """Setting up Computer Vision"""
