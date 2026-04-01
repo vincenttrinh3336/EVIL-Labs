@@ -7,7 +7,6 @@ A modern React web application for managing smart pet feeders. This app allows y
 - 🍽️ **Smart Feeding Control** - Dispense food remotely with custom portions
 - 📹 **Live Video Feed** - Watch your pets eat in real-time
 - 📊 **Analytics Dashboard** - Track feeding patterns and nutrition data
-- 🐕 **Pet Profiles** - Manage multiple pets with RFID tag support
 - 🔔 **Smart Notifications** - Get alerts for feeding times and low food levels
 - ⚙️ **Device Settings** - Configure Wi-Fi, firmware updates, and preferences
 
