@@ -482,21 +482,27 @@ def getSchedule():
 
 
 def dispenseFood(time_str, pet, duration):
-    global cam_state, servo_angle
+    global cam_state, servo_angle, servo
     feed_time = time_str
     pet_name = pet
-    wait_time = duration
+    wait_time = float(duration) # Convert to float
     print("Dispensing food...")
-    #Move servo to a given angle (0–180), wait, then return to 0.
-    # Convert angle (0–180) to gpiozero range (-1 to 1)
-    value = (servo_angle / 90) - 1  # 0°=-1, 90°=0, 180°=1
+
+    # Store original position before moving
+    original_value = servo.value
+
+    # Clamp angle to valid range (0-360)
+    clamped_angle = max(0, min(360, servo_angle))
+
+    # Convert angle (0–360) to gpiozero range (-1 to 1)
+    value = (clamped_angle / 180) - 1  # 0°=-1, 180°=0, 360°=1
 
     # Move to target angle
     servo.value = value
     sleep(wait_time)
 
-    # Move back to 0°
-    servo.value = -1
+    # Move back to original position
+    servo.value = original_value
     sleep(wait_time)
 
     # Stop sending signal (prevents jitter)
@@ -861,12 +867,13 @@ def main():
     vision_active = False   # True if CV model should be running (depends on cam_state)
     vision_stop_time = 0
     sensor = DistanceSensor(echo=24, trigger=23) # Adjust pin numbers if needed
-    servo = Servo(18) # Initialize servo on GPIO 18
+    servo = Servo(27) # Initialize servo on GPIO 27
+    servo.value = 0.2 # Set initial position to 0 degrees
     pir = MotionSensor(17) # Initialize PIR motion sensor to GPIO 17
     lock = Lock()
     cam_state = True
     last_dispense_time = ""
-    servo_angle = 90
+    servo_angle = -240
 
     # Initializations for FastAPI and DB
     global app, DB_PATH
