@@ -1,0 +1,1 @@
+export const RPI_URL = "http://192.168.50.130:8000"; // RPI IP Address

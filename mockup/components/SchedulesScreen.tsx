@@ -6,8 +6,8 @@ import {
 import { ArrowLeft, Plus, Trash2, Clock, MapPin, Scale } from "lucide-react-native";
 import { MotiView, AnimatePresence } from "moti";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RPI_URL } from "../constants";
 
-const RPI_URL = "http://192.168.1.XX:8000"; // Replace with your Pi's IP
 const GRAMS_PER_SECOND = 15;
 
 export function SchedulesScreen({ onBack }: { onBack: () => void }) {

@@ -37,6 +37,11 @@ from typing import List, Tuple, Optional
 from dataclasses import dataclass, asdict
 from collections import deque
 
+# Initializations for FastAPI and DB
+global app, DB_PATH
+app = FastAPI()
+DB_PATH = "feeder_schedule.db"
+
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
@@ -907,11 +912,6 @@ def main():
     cam_state = True
     last_dispense_time = ""
     servo_angle = -240
-
-    # Initializations for FastAPI and DB
-    global app, DB_PATH
-    app = FastAPI()
-    DB_PATH = "feeder_schedule.db"
 
     # Initializations for notifications
     global cred

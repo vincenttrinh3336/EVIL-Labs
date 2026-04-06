@@ -30,10 +30,9 @@ import {
   Wifi, 
   Settings 
 } from "lucide-react-native";
+import { RPI_URL } from "../constants";
 
 const { width } = Dimensions.get("window");
-
-const RPI_URL = "http://192.168.1.XX:8000"; // Ensure this matches your Pi's IP
 const GRAMS_PER_SECOND = 15;
 
 // Add to separate utils file later

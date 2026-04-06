@@ -9,9 +9,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getMessaging, onMessage } from '@react-native-firebase/messaging';
 import { MotiView } from "moti";
 
-const { width } = Dimensions.get('window');
+import { RPI_URL } from "../constants";
 
-const RPI_URL = "http://192.168.1.XX:8000"; // Use your Pi's IP
+const { width } = Dimensions.get('window');
 const GRAMS_PER_SECOND = 15;
 
 export function HistoryScreen({ onNavigate }) {
