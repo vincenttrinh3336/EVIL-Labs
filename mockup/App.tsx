@@ -1,39 +1,62 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, SafeAreaView, StatusBar } from 'react-native';
-import { CirclePause, Settings, LayoutDashboard } from 'lucide-react-native';
+import React, { useState } from "react";
+import { StyleSheet, View, SafeAreaView, StatusBar } from "react-native";
 
-// Import your screens (we will convert these next)
-// import Dashboard from './screens/Dashboard';
+// Note: You will need to convert these components next!
+import { SplashScreen } from "./components/SplashScreen";
+import { OnboardingScreens } from "./components/OnboardingScreens";
+import { LoginScreen } from "./components/LoginScreen";
+import { HomeDashboard } from "./components/HomeDashboard";
+import { LiveFeedScreen } from "./components/LiveFeedScreen";
+import { PetProfilesScreen } from "./components/PetProfilesScreen";
+import { NotificationsScreen } from "./components/NotificationsScreen";
+import { SettingsScreen } from "./components/SettingsScreen";
+import { AnalyticsScreen } from "./components/AnalyticsScreen";
+
+type Screen =
+  | "splash"
+  | "onboarding"
+  | "login"
+  | "home"
+  | "live"
+  | "pets"
+  | "notifications"
+  | "settings"
+  | "analytics";
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('dashboard');
+  const [currentScreen, setCurrentScreen] = useState<Screen>("splash");
+
+  const renderScreen = () => {
+    switch (currentScreen) {
+      case "splash":
+        return <SplashScreen onGetStarted={() => setCurrentScreen("onboarding")} />;
+      case "onboarding":
+        return <OnboardingScreens onComplete={() => setCurrentScreen("login")} />;
+      case "login":
+        return <LoginScreen onLogin={() => setCurrentScreen("home")} />;
+      case "home":
+        return <HomeDashboard onNavigate={(screen) => setCurrentScreen(screen as Screen)} />;
+      case "live":
+        return <LiveFeedScreen onBack={() => setCurrentScreen("home")} />;
+      case "pets":
+        return <PetProfilesScreen onBack={() => setCurrentScreen("home")} />;
+      case "notifications":
+        return <NotificationsScreen onBack={() => setCurrentScreen("home")} />;
+      case "settings":
+        return <SettingsScreen onBack={() => setCurrentScreen("home")} />;
+      case "analytics":
+        return <AnalyticsScreen onBack={() => setCurrentScreen("home")} />;
+      default:
+        return <HomeDashboard onNavigate={(screen) => setCurrentScreen(screen as Screen)} />;
+    }
+  };
 
   return (
+    // SafeAreaView prevents the UI from going under the iPhone notch
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      
-      {/* Header Area */}
-      <View style={styles.header}>
-        <Text style={styles.headerText}>Pet Feeder Pro</Text>
-        <Settings color="#333" size={24} />
-      </View>
-
-      {/* Main Content Area */}
-      <View style={styles.content}>
-        {currentScreen === 'dashboard' ? (
-          <View style={styles.placeholder}>
-            <LayoutDashboard size={48} color="#6366f1" />
-            <Text>Dashboard Screen Ready for Conversion</Text>
-          </View>
-        ) : (
-          <Text>Other Screen</Text>
-        )}
-      </View>
-
-      {/* Simple Navigation Bar (Replacing Web Tabs) */}
-      <View style={styles.tabBar}>
-        <Text onPress={() => setCurrentScreen('dashboard')}>Dashboard</Text>
-        <Text onPress={() => setCurrentScreen('settings')}>Settings</Text>
+      <View style={styles.wrapper}>
+        {renderScreen()}
       </View>
     </SafeAreaView>
   );
@@ -42,40 +65,10 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#ffffff", // Matches your bg-background
   },
-  header: {
-    height: 60,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  headerText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1e293b',
-  },
-  content: {
+  wrapper: {
     flex: 1,
-    padding: 20,
+    // Mobile apps are "size-full" by default with flex: 1
   },
-  placeholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-  },
-  tabBar: {
-    height: 70,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-  }
 });

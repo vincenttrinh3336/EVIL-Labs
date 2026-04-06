@@ -1,15 +1,35 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { Button, Card, Slider, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/lib/ui";
-import { Home, Video, Heart, Bell, Utensils, Clock, BarChart3, Wifi, Settings } from "lucide-react";
+import React, { useState } from "react";
+import { 
+  StyleSheet, 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  Image, 
+  ScrollView, 
+  SafeAreaView, 
+  Modal,
+  Dimensions 
+} from "react-native";
+import { MotiView, AnimatePresence } from "moti";
+import { LinearGradient } from "expo-linear-gradient";
+import Slider from '@react-native-community/slider';
+import { 
+  Home, 
+  Video, 
+  Heart, 
+  Bell, 
+  Utensils, 
+  Clock, 
+  BarChart3, 
+  Wifi, 
+  Settings 
+} from "lucide-react-native";
 
-interface HomeDashboardProps {
-  onNavigate: (screen: string) => void;
-}
+const { width } = Dimensions.get("window");
 
-export function HomeDashboard({ onNavigate }: HomeDashboardProps) {
-  const [showFeedDialog, setShowFeedDialog] = useState(false);
-  const [portion, setPortion] = useState([50]);
+export function HomeDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
+  const [showFeedModal, setShowFeedModal] = useState(false);
+  const [portion, setPortion] = useState(50);
   const [activeTab, setActiveTab] = useState("home");
 
   const stats = [
@@ -26,221 +46,209 @@ export function HomeDashboard({ onNavigate }: HomeDashboardProps) {
     { id: "notifications", icon: Bell, label: "Alerts" },
   ];
 
-  const handleNavClick = (id: string) => {
-    setActiveTab(id);
-    if (id === "live") onNavigate("live");
-    if (id === "pets") onNavigate("pets");
-    if (id === "notifications") onNavigate("notifications");
-  };
-
-  const handleFeedNow = () => {
-    setShowFeedDialog(false);
-    // Animation feedback
-  };
-
   return (
-    <div className="h-full bg-background flex flex-col">
+    <View style={styles.container}>
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#5C6BC0] to-[#7986CB] pt-12 pb-6 px-6 rounded-b-[2rem]">
-        <div className="flex items-center justify-between">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <h2 className="text-white mb-1">Hi, Welcome Back! 👋</h2>
-            <p className="text-white/80">Luna's feeder is ready 🐕</p>
-          </motion.div>
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onNavigate("settings")}
-            className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
-          >
-            <Settings className="w-5 h-5 text-white" />
-          </motion.button>
-        </div>
-      </div>
+      <LinearGradient colors={["#5C6BC0", "#7986CB"]} style={styles.header}>
+        <SafeAreaView>
+          <View style={styles.headerTop}>
+            <MotiView from={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+              <Text style={styles.greeting}>Hi, Welcome Back! 👋</Text>
+              <Text style={styles.subGreeting}>Luna's feeder is ready 🐕</Text>
+            </MotiView>
+            <TouchableOpacity 
+              onPress={() => onNavigate("settings")}
+              style={styles.settingsBtn}
+            >
+              <Settings size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 pb-24">
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 120 }}>
         {/* Live Feed Card */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
+        <MotiView 
+          from={{ opacity: 0, scale: 0.95 }} 
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.1 }}
-          className="-mt-8 mb-6"
+          style={styles.liveCardWrapper}
         >
-          <Card className="overflow-hidden shadow-lg rounded-3xl border-0">
-            <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200">
-              <img
-                src="https://images.unsplash.com/photo-1597105888983-ae503ec1ef3e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjdXRlJTIwZG9nJTIwZWF0aW5nfGVufDF8fHx8MTc2MDIzNTM5NXww&ixlib=rb-4.1.0&q=80&w=1080"
-                alt="Live feed"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-full flex items-center gap-2">
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                <span className="text-sm">LIVE</span>
-              </div>
-              <button
-                onClick={() => onNavigate("live")}
-                className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity"
-              >
-                <div className="bg-white/90 rounded-full p-4">
-                  <Video className="w-8 h-8 text-[#5C6BC0]" />
-                </div>
-              </button>
-            </div>
-          </Card>
-        </motion.div>
+          <TouchableOpacity 
+            activeOpacity={0.9} 
+            onPress={() => onNavigate("live")} 
+            style={styles.liveCard}
+          >
+            <Image 
+              source={{ uri: "https://images.unsplash.com/photo-1597105888983-ae503ec1ef3e?q=80&w=1080" }} 
+              style={styles.liveImage} 
+            />
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+            <View style={styles.playOverlay}>
+              <View style={styles.playBtnCircle}>
+                <Video size={32} color="#5C6BC0" />
+              </View>
+            </View>
+          </TouchableOpacity>
+        </MotiView>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          {stats.map((stat, index) => {
-            const Icon = stat.icon;
-            return (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 + index * 0.1 }}
-              >
-                <Card className="p-4 rounded-2xl border-0 shadow-md hover:shadow-lg transition-shadow">
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center mb-3"
-                    style={{ backgroundColor: `${stat.color}20` }}
-                  >
-                    <Icon className="w-5 h-5" style={{ color: stat.color }} />
-                  </div>
-                  <p className="text-muted-foreground mb-1 text-sm">{stat.label}</p>
-                  <p className="font-medium">{stat.value}</p>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
+        {/* Quick Stats Grid */}
+        <View style={styles.statsGrid}>
+          {stats.map((stat, i) => (
+            <MotiView 
+              key={stat.label}
+              from={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 100 + (i * 50) }}
+              style={styles.statCard}
+            >
+              <View style={[styles.statIconBox, { backgroundColor: `${stat.color}15` }]}>
+                <stat.icon size={20} color={stat.color} />
+              </View>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+              <Text style={styles.statValue}>{stat.value}</Text>
+            </MotiView>
+          ))}
+        </View>
 
         {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-        >
-          <h3 className="mb-4">Quick Actions</h3>
-          <div className="space-y-3">
-            <Card className="p-4 rounded-2xl border-0 shadow-md flex items-center justify-between">
-              <div>
-                <p className="font-medium mb-1">Schedule Next Meal</p>
-                <p className="text-muted-foreground text-sm">Set a custom feeding time</p>
-              </div>
-              <Button
-                variant="outline"
-                className="rounded-full border-[#5C6BC0] text-[#5C6BC0]"
-              >
-                Schedule
-              </Button>
-            </Card>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.actionCard}>
+          <View>
+            <Text style={styles.actionTitle}>Schedule Next Meal</Text>
+            <Text style={styles.actionSub}>Set a custom feeding time</Text>
+          </View>
+          <TouchableOpacity style={styles.actionBtn}>
+            <Text style={styles.actionBtnText}>Schedule</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
 
-            <Card className="p-4 rounded-2xl border-0 shadow-md flex items-center justify-between">
-              <div>
-                <p className="font-medium mb-1">View Analytics</p>
-                <p className="text-muted-foreground text-sm">Check feeding patterns</p>
-              </div>
-              <Button
-                variant="outline"
-                className="rounded-full border-[#FFB74D] text-[#FFB74D]"
-                onClick={() => onNavigate("analytics")}
-              >
-                View
-              </Button>
-            </Card>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Floating Feed Button */}
-      <motion.div
-        className="absolute bottom-24 right-6"
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ delay: 0.8, type: "spring" }}
+      {/* Floating Action Button */}
+      <MotiView 
+        from={{ scale: 0 }} 
+        animate={{ scale: 1 }} 
+        transition={{ type: 'spring', delay: 500 }}
+        style={styles.fabWrapper}
       >
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setShowFeedDialog(true)}
-          className="bg-[#FFB74D] hover:bg-[#FFB74D]/90 text-white rounded-full p-5 shadow-2xl"
+        <TouchableOpacity 
+          style={styles.fab} 
+          onPress={() => setShowFeedModal(true)}
         >
-          <Utensils className="w-7 h-7" />
-        </motion.button>
-      </motion.div>
+          <Utensils size={28} color="white" />
+        </TouchableOpacity>
+      </MotiView>
 
-      {/* Feed Dialog */}
-      <Dialog open={showFeedDialog} onOpenChange={setShowFeedDialog}>
-        <DialogContent className="rounded-3xl">
-          <DialogHeader>
-            <DialogTitle>Feed Now</DialogTitle>
-          </DialogHeader>
-          <div className="py-6">
-            <p className="text-muted-foreground mb-6">Select portion size</p>
-            <div className="space-y-6">
-              <div>
-                <div className="flex justify-between mb-4">
-                  <span className="text-muted-foreground">Portion</span>
-                  <span className="font-medium">{portion[0]}g</span>
-                </div>
-                <Slider
-                  value={portion}
-                  onValueChange={setPortion}
-                  max={100}
-                  step={5}
-                  className="w-full"
-                />
-              </div>
-              <Button
-                onClick={handleFeedNow}
-                className="w-full bg-[#5C6BC0] hover:bg-[#5C6BC0]/90 rounded-full h-12"
-              >
-                Dispense Food
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Feed Modal */}
+      <Modal visible={showFeedModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <MotiView 
+            from={{ opacity: 0, scale: 0.9 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            style={styles.modalContent}
+          >
+            <Text style={styles.modalTitle}>Feed Now</Text>
+            <Text style={styles.modalSub}>Select portion size</Text>
+            
+            <View style={styles.portionRow}>
+              <Text style={styles.portionLabel}>Portion</Text>
+              <Text style={styles.portionValue}>{Math.round(portion)}g</Text>
+            </View>
+
+            <Slider
+              style={{ width: '100%', height: 40 }}
+              minimumValue={0}
+              maximumValue={100}
+              step={5}
+              value={portion}
+              onValueChange={setPortion}
+              minimumTrackTintColor="#5C6BC0"
+              maximumTrackTintColor="#D1D5DB"
+              thumbTintColor="#5C6BC0"
+            />
+
+            <TouchableOpacity 
+              style={styles.dispenseBtn}
+              onPress={() => setShowFeedModal(false)}
+            >
+              <Text style={styles.dispenseBtnText}>Dispense Food</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.cancelBtn} 
+              onPress={() => setShowFeedModal(false)}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </MotiView>
+        </View>
+      </Modal>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border">
-        <div className="flex justify-around items-center px-4 py-3">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <motion.button
-                key={item.id}
-                onClick={() => handleNavClick(item.id)}
-                className="flex flex-col items-center gap-1 py-2 px-4 rounded-xl transition-colors"
-                whileTap={{ scale: 0.95 }}
-              >
-                <Icon
-                  className={`w-6 h-6 ${
-                    isActive ? "text-[#5C6BC0]" : "text-muted-foreground"
-                  }`}
-                />
-                <span
-                  className={`text-xs ${
-                    isActive ? "text-[#5C6BC0]" : "text-muted-foreground"
-                  }`}
-                >
-                  {item.label}
-                </span>
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute -bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-[#5C6BC0] rounded-full"
-                  />
-                )}
-              </motion.button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+      <View style={styles.bottomNav}>
+        {navItems.map((item) => {
+          const isActive = activeTab === item.id;
+          return (
+            <TouchableOpacity 
+              key={item.id} 
+              onPress={() => setActiveTab(item.id)}
+              style={styles.navItem}
+            >
+              <item.icon size={24} color={isActive ? "#5C6BC0" : "#9CA3AF"} />
+              <Text style={[styles.navText, isActive && { color: "#5C6BC0" }]}>{item.label}</Text>
+              {isActive && <View style={styles.activeDot} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F8F9FE" },
+  header: { paddingBottom: 40, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 12 },
+  greeting: { color: 'white', fontSize: 20, fontWeight: 'bold' },
+  subGreeting: { color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 4 },
+  settingsBtn: { width: 40, height: 40, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  content: { paddingHorizontal: 24 },
+  liveCardWrapper: { marginTop: -20, marginBottom: 24 },
+  liveCard: { height: 200, borderRadius: 24, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 15 },
+  liveImage: { width: '100%', height: '100%' },
+  liveBadge: { position: 'absolute', top: 16, left: 16, backgroundColor: '#EF4444', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
+  liveDot: { width: 8, height: 8, backgroundColor: 'white', borderRadius: 4, marginRight: 6 },
+  liveText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
+  playOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.1)', justifyContent: 'center', alignItems: 'center' },
+  playBtnCircle: { width: 64, height: 64, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  statCard: { width: '47%', backgroundColor: 'white', padding: 16, borderRadius: 24, marginBottom: 16, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
+  statIconBox: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  statLabel: { color: '#6B7280', fontSize: 12, marginBottom: 4 },
+  statValue: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginVertical: 16 },
+  actionCard: { backgroundColor: 'white', padding: 16, borderRadius: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 2 },
+  actionTitle: { fontWeight: '600', fontSize: 15 },
+  actionSub: { color: '#6B7280', fontSize: 13, marginTop: 2 },
+  actionBtn: { borderWidth: 1, borderColor: '#5C6BC0', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100 },
+  actionBtnText: { color: '#5C6BC0', fontWeight: '600', fontSize: 13 },
+  fabWrapper: { position: 'absolute', bottom: 100, right: 24 },
+  fab: { backgroundColor: '#FFB74D', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#FFB74D', shadowOpacity: 0.4, shadowRadius: 10 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalContent: { backgroundColor: 'white', width: '100%', padding: 24, borderRadius: 32 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 8 },
+  modalSub: { color: '#6B7280', marginBottom: 24 },
+  portionRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  portionLabel: { color: '#6B7280' },
+  portionValue: { fontWeight: 'bold', color: '#111827' },
+  dispenseBtn: { backgroundColor: '#5C6BC0', padding: 16, borderRadius: 100, alignItems: 'center', marginTop: 24 },
+  dispenseBtnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  cancelBtn: { marginTop: 12, alignItems: 'center' },
+  cancelText: { color: '#9CA3AF' },
+  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'white', flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingBottom: 20 },
+  navItem: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  navText: { fontSize: 10, marginTop: 4, color: '#9CA3AF' },
+  activeDot: { width: 4, height: 4, backgroundColor: '#5C6BC0', borderRadius: 2, marginTop: 4 }
+});

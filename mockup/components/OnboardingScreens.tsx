@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/lib/ui";
-import { Clock, Video, TrendingUp, ChevronRight } from "lucide-react";
+import React, { useState } from "react";
+import { StyleSheet, View, Text, TouchableOpacity, Dimensions } from "react-native";
+import { MotiView, AnimatePresence } from "moti";
+import { Clock, Video, TrendingUp, ChevronRight } from "lucide-react-native";
+
+const { width } = Dimensions.get("window");
 
 interface OnboardingScreensProps {
   onComplete: () => void;
@@ -39,92 +41,172 @@ export function OnboardingScreens({ onComplete }: OnboardingScreensProps) {
     }
   };
 
-  const handleSkip = () => {
-    onComplete();
-  };
-
   return (
-    <div className="h-full bg-background flex flex-col">
-      {/* Skip button */}
-      <div className="flex justify-end p-6">
-        <button
-          onClick={handleSkip}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Skip
-        </button>
-      </div>
+    <View style={styles.container}>
+      {/* Skip button - Replaces the top div */}
+      <View style={styles.skipContainer}>
+        <TouchableOpacity onPress={onComplete}>
+          <Text style={styles.skipText}>Skip</Text>
+        </TouchableOpacity>
+      </View>
 
-      {/* Slides */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6">
-        <AnimatePresence mode="wait">
-          <motion.div
+      {/* Slides Container */}
+      <View style={styles.contentContainer}>
+        <AnimatePresence exitBeforeEnter>
+          <MotiView
             key={currentSlide}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            transition={{ duration: 0.3 }}
-            className="flex flex-col items-center text-center"
+            from={{ opacity: 0, translateX: 50 }}
+            animate={{ opacity: 1, translateX: 0 }}
+            exit={{ opacity: 0, translateX: -50 }}
+            transition={{ type: 'timing', duration: 300 }}
+            style={styles.slide}
           >
-            {/* Icon */}
-            <motion.div
-              className="mb-8 rounded-full p-8 shadow-lg"
-              style={{ backgroundColor: slides[currentSlide].color }}
-              initial={{ scale: 0 }}
+            {/* Animated Icon Circle */}
+            <MotiView 
+              from={{ scale: 0 }}
               animate={{ scale: 1 }}
-              transition={{ delay: 0.2, type: "spring" }}
+              transition={{ type: 'spring', delay: 200 }}
+              style={[styles.iconCircle, { backgroundColor: slides[currentSlide].color }]}
             >
-              {(() => {
-                const Icon = slides[currentSlide].icon;
-                return <Icon className="w-16 h-16 text-white" />;
-              })()}
-            </motion.div>
+              {React.createElement(slides[currentSlide].icon, {
+                size: 64,
+                color: "#FFFFFF",
+              })}
+            </MotiView>
 
-            {/* Content */}
-            <h2 className="mb-4">{slides[currentSlide].title}</h2>
-            <p className="text-muted-foreground max-w-sm">
+            <Text style={styles.title}>{slides[currentSlide].title}</Text>
+            <Text style={styles.description}>
               {slides[currentSlide].description}
-            </p>
-          </motion.div>
+            </Text>
+          </MotiView>
         </AnimatePresence>
-      </div>
+      </View>
 
-      {/* Pagination dots */}
-      <div className="flex justify-center gap-2 mb-8">
+      {/* Pagination dots - Clickable like your original */}
+      <View style={styles.paginationRow}>
         {slides.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => setCurrentSlide(index)}
-            className="transition-all"
+          <TouchableOpacity 
+            key={index} 
+            onPress={() => setCurrentSlide(index)}
           >
-            <div
-              className={`h-2 rounded-full transition-all ${
-                index === currentSlide
-                  ? "w-8 bg-[#5C6BC0]"
-                  : "w-2 bg-muted"
-              }`}
+            <View
+              style={[
+                styles.dot,
+                index === currentSlide ? styles.activeDot : styles.inactiveDot,
+              ]}
             />
-          </button>
+          </TouchableOpacity>
         ))}
-      </div>
+      </View>
 
-      {/* Continue button */}
-      <div className="p-6">
-        <motion.div whileTap={{ scale: 0.98 }}>
-          <Button
-            onClick={handleNext}
-            className="w-full bg-[#5C6BC0] hover:bg-[#5C6BC0]/90 rounded-full py-6"
-          >
-            {currentSlide < slides.length - 1 ? (
-              <>
-                Continue <ChevronRight className="ml-2 w-5 h-5" />
-              </>
-            ) : (
-              "Get Started"
-            )}
-          </Button>
-        </motion.div>
-      </div>
-    </div>
+      {/* Bottom Continue Button */}
+      <View style={styles.footer}>
+        <TouchableOpacity 
+          onPress={handleNext} 
+          activeOpacity={0.8}
+          style={styles.primaryButton}
+        >
+          <Text style={styles.primaryButtonText}>
+            {currentSlide < slides.length - 1 ? "Continue" : "Get Started"}
+          </Text>
+          {currentSlide < slides.length - 1 && (
+            <ChevronRight size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  skipContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 24,
+    paddingTop: 12,
+  },
+  skipText: {
+    color: "#666",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  contentContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  slide: {
+    alignItems: "center",
+    width: width,
+    paddingHorizontal: 24,
+  },
+  iconCircle: {
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 32,
+    // Android Shadow
+    elevation: 10,
+    // iOS Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#1A1A1A",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  description: {
+    fontSize: 17,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 26,
+  },
+  paginationRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  dot: {
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 4,
+    transition: 'all',
+  },
+  activeDot: {
+    width: 32,
+    backgroundColor: "#5C6BC0",
+  },
+  inactiveDot: {
+    width: 8,
+    backgroundColor: "#E0E0E0",
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+  },
+  primaryButton: {
+    backgroundColor: "#5C6BC0",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 20,
+    borderRadius: 100,
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+});

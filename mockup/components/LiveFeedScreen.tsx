@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { Button, Badge } from "@/lib/ui";
-import { ArrowLeft, Video, Camera, Volume2, VolumeX, Radio } from "lucide-react";
+import React, { useState } from "react";
+import { StyleSheet, View, Text, TouchableOpacity, Image, Dimensions, SafeAreaView } from "react-native";
+import { MotiView } from "moti";
+import { LinearGradient } from "expo-linear-gradient";
+import { ArrowLeft, Video, Camera, Volume2, VolumeX, Radio } from "lucide-react-native";
+
+const { width } = Dimensions.get("window");
 
 interface LiveFeedScreenProps {
   onBack: () => void;
@@ -12,146 +15,297 @@ export function LiveFeedScreen({ onBack }: LiveFeedScreenProps) {
   const [isMuted, setIsMuted] = useState(false);
 
   return (
-    <div className="h-full bg-black flex flex-col">
-      {/* Video Feed */}
-      <div className="flex-1 relative">
-        <img
-          src="https://images.unsplash.com/photo-1597105888983-ae503ec1ef3e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjdXRlJTIwZG9nJTIwZWF0aW5nfGVufDF8fHx8MTc2MDIzNTM5NXww&ixlib=rb-4.1.0&q=80&w=1080"
-          alt="Live feed"
-          className="w-full h-full object-cover"
+    <View style={styles.container}>
+      {/* Video Feed Area */}
+      <View style={styles.videoContainer}>
+        <Image
+          source={{ uri: "https://images.unsplash.com/photo-1597105888983-ae503ec1ef3e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjdXRlJTIwZG9nJTIwZWF0aW5nfGVufDF8fHx8MTc2MDIzNTM5NXww&ixlib=rb-4.1.0&q=80&w=1080" }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
         />
 
-        {/* Top Bar */}
-        <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-6">
-          <div className="flex items-center justify-between">
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={onBack}
-              className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
-            >
-              <ArrowLeft className="w-6 h-6 text-white" />
-            </motion.button>
+        {/* Top Gradient & Navigation */}
+        <LinearGradient
+          colors={['rgba(0,0,0,0.6)', 'transparent']}
+          style={styles.topGradient}
+        >
+          <SafeAreaView style={styles.headerRow}>
+            <TouchableOpacity onPress={onBack} style={styles.iconBtn}>
+              <ArrowLeft size={24} color="white" />
+            </TouchableOpacity>
 
-            <Badge className="bg-red-500 text-white px-4 py-2 rounded-full border-0 flex items-center gap-2">
-              <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              LIVE
-            </Badge>
+            <View style={styles.liveBadge}>
+              <MotiView
+                from={{ opacity: 0.4 }}
+                animate={{ opacity: 1 }}
+                transition={{ loop: true, duration: 1000, type: 'timing' }}
+                style={styles.liveDot}
+              />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
 
-            <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-              <Radio className="w-5 h-5 text-white" />
-            </div>
-          </div>
-        </div>
+            <View style={styles.statusIndicator}>
+              <Radio size={20} color="white" />
+            </View>
+          </SafeAreaView>
+        </LinearGradient>
 
         {/* Detection Overlay */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-24 left-6 right-6"
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          style={styles.detectionCard}
         >
-          <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-4 shadow-lg">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-[#5C6BC0] rounded-full flex items-center justify-center">
-                <span className="text-2xl">🐕</span>
-              </div>
-              <div>
-                <p className="font-medium">Detected: Luna</p>
-                <p className="text-muted-foreground text-sm">RFID Tag: #A4F2B8</p>
-              </div>
-              <motion.div
-                className="ml-auto"
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ repeat: Infinity, duration: 2 }}
-              >
-                <div className="w-3 h-3 bg-green-500 rounded-full" />
-              </motion.div>
-            </div>
-          </div>
-        </motion.div>
+          <View style={styles.detectionInner}>
+            <View style={styles.petAvatar}>
+              <Text style={{ fontSize: 24 }}>🐕</Text>
+            </View>
+            <View>
+              <Text style={styles.detectionTitle}>Detected: Luna</Text>
+              <Text style={styles.detectionSub}>RFID Tag: #A4F2B8</Text>
+            </View>
+            <MotiView
+              from={{ scale: 1 }}
+              animate={{ scale: 1.2 }}
+              transition={{ loop: true, type: 'timing', duration: 1000 }}
+              style={styles.activePulse}
+            />
+          </View>
+        </MotiView>
 
-        {/* Bottom Controls */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-8">
-          <div className="flex justify-center items-center gap-6">
-            {/* Record Button */}
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setIsRecording(!isRecording)}
-              className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-                isRecording
-                  ? "bg-red-500"
-                  : "bg-white/20 backdrop-blur-sm"
-              }`}
+        {/* Bottom Controls Overlay */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.8)']}
+          style={styles.bottomGradient}
+        >
+          <View style={styles.controlsRow}>
+            <TouchableOpacity 
+              onPress={() => setIsRecording(!isRecording)}
+              style={[styles.actionBtn, isRecording && styles.recordingActive]}
             >
-              <Video className="w-6 h-6 text-white" />
-            </motion.button>
+              <Video size={24} color="white" />
+            </TouchableOpacity>
 
-            {/* Snapshot Button */}
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-xl"
+            <TouchableOpacity style={styles.snapshotBtn}>
+              <Camera size={28} color="#5C6BC0" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={() => setIsMuted(!isMuted)}
+              style={styles.actionBtn}
             >
-              <Camera className="w-7 h-7 text-[#5C6BC0]" />
-            </motion.button>
+              {isMuted ? <VolumeX size={24} color="white" /> : <Volume2 size={24} color="white" />}
+            </TouchableOpacity>
+          </View>
 
-            {/* Mute Button */}
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setIsMuted(!isMuted)}
-              className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
-            >
-              {isMuted ? (
-                <VolumeX className="w-6 h-6 text-white" />
-              ) : (
-                <Volume2 className="w-6 h-6 text-white" />
-              )}
-            </motion.button>
-          </div>
-
-          {/* Info Bar */}
-          <div className="mt-6 flex justify-between items-center">
-            <div className="text-white/80 text-sm">
+          <View style={styles.infoBar}>
+            <View style={{ flex: 1 }}>
               {isRecording && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex items-center gap-2"
-                >
-                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                  Recording...
-                </motion.div>
+                <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.recordingTextRow}>
+                  <View style={styles.recordingDot} />
+                  <Text style={styles.infoText}>Recording...</Text>
+                </MotiView>
               )}
-            </div>
-            <div className="text-white/80 text-sm">
-              Quality: HD 1080p
-            </div>
-          </div>
-        </div>
-      </div>
+            </View>
+            <Text style={styles.infoText}>Quality: HD 1080p</Text>
+          </View>
+        </LinearGradient>
+      </View>
 
       {/* Quick Actions Panel */}
-      <motion.div
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="bg-card p-6 rounded-t-3xl"
+      <MotiView
+        from={{ translateY: 100 }}
+        animate={{ translateY: 0 }}
+        style={styles.quickActions}
       >
-        <h3 className="mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <Button
-            variant="outline"
-            className="rounded-2xl h-auto py-4 flex flex-col gap-2 border-border"
-          >
-            <Camera className="w-6 h-6 text-[#5C6BC0]" />
-            <span className="text-sm">Take Photo</span>
-          </Button>
-          <Button
-            variant="outline"
-            className="rounded-2xl h-auto py-4 flex flex-col gap-2 border-border"
-          >
-            <Video className="w-6 h-6 text-[#FFB74D]" />
-            <span className="text-sm">Start Recording</span>
-          </Button>
-        </div>
-      </motion.div>
-    </div>
+        <Text style={styles.panelTitle}>Quick Actions</Text>
+        <View style={styles.grid}>
+          <TouchableOpacity style={styles.gridBtn}>
+            <Camera size={24} color="#5C6BC0" />
+            <Text style={styles.gridBtnText}>Take Photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.gridBtn}>
+            <Video size={24} color="#FFB74D" />
+            <Text style={styles.gridBtnText}>Start Recording</Text>
+          </TouchableOpacity>
+        </View>
+      </MotiView>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "black",
+  },
+  videoContainer: {
+    flex: 1,
+  },
+  topGradient: {
+    paddingTop: 10,
+    paddingHorizontal: 20,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    backgroundColor: 'white',
+    borderRadius: 4,
+  },
+  liveText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  statusIndicator: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#22C55E',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detectionCard: {
+    position: 'absolute',
+    top: 120,
+    left: 20,
+    right: 20,
+  },
+  detectionInner: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: 16,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  petAvatar: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#5C6BC0',
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detectionTitle: {
+    fontWeight: '600',
+    fontSize: 16,
+    color: '#1A1A1A',
+  },
+  detectionSub: {
+    fontSize: 12,
+    color: '#666',
+  },
+  activePulse: {
+    marginLeft: 'auto',
+    width: 12,
+    height: 12,
+    backgroundColor: '#22C55E',
+    borderRadius: 6,
+  },
+  bottomGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 30,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
+  },
+  actionBtn: {
+    width: 56,
+    height: 56,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingActive: {
+    backgroundColor: '#EF4444',
+  },
+  snapshotBtn: {
+    width: 64,
+    height: 64,
+    backgroundColor: 'white',
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  infoBar: {
+    flexDirection: 'row',
+    marginTop: 24,
+  },
+  infoText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+  },
+  recordingTextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recordingDot: {
+    width: 10,
+    height: 10,
+    backgroundColor: '#EF4444',
+    borderRadius: 5,
+  },
+  quickActions: {
+    backgroundColor: 'white',
+    padding: 24,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+  },
+  panelTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  grid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  gridBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    gap: 8,
+  },
+  gridBtnText: {
+    fontSize: 12,
+    color: '#374151',
+  },
+});

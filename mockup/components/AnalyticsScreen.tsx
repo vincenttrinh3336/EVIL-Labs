@@ -1,239 +1,168 @@
-import { motion } from "framer-motion";
-import { Card, Button } from "@/lib/ui";
-import { ArrowLeft, TrendingUp, Download, Calendar } from "lucide-react";
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import React from "react";
+import { 
+  StyleSheet, 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  ScrollView, 
+  SafeAreaView, 
+  Dimensions 
+} from "react-native";
+import { MotiView } from "moti";
+import { LinearGradient } from "expo-linear-gradient";
+import { 
+  LineChart, 
+  BarChart, 
+  PieChart 
+} from "react-native-chart-kit";
+import { 
+  ArrowLeft, 
+  TrendingUp, 
+  Download, 
+  Calendar 
+} from "lucide-react-native";
 
-interface AnalyticsScreenProps {
-  onBack: () => void;
-}
+const screenWidth = Dimensions.get("window").width;
 
-const weeklyData = [
-  { day: "Mon", Luna: 240, Charlie: 120 },
-  { day: "Tue", Luna: 250, Charlie: 130 },
-  { day: "Wed", Luna: 235, Charlie: 125 },
-  { day: "Thu", Luna: 255, Charlie: 135 },
-  { day: "Fri", Luna: 245, Charlie: 128 },
-  { day: "Sat", Luna: 260, Charlie: 140 },
-  { day: "Sun", Luna: 248, Charlie: 132 },
-];
+const weeklyData = {
+  labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  datasets: [
+    { data: [240, 250, 235, 255, 245, 260, 248], color: () => "#5C6BC0" }, // Luna
+    { data: [120, 130, 125, 135, 128, 140, 132], color: () => "#FFB74D" }  // Charlie
+  ],
+  legend: ["Luna", "Charlie"]
+};
 
 const timeDistribution = [
-  { name: "Morning (6-10 AM)", value: 35, color: "#FFB74D" },
-  { name: "Midday (10-2 PM)", value: 20, color: "#5C6BC0" },
-  { name: "Evening (6-8 PM)", value: 40, color: "#81C784" },
-  { name: "Night (8-10 PM)", value: 5, color: "#64B5F6" },
+  { name: "Morning", population: 35, color: "#FFB74D", legendFontColor: "#7F7F7F", legendFontSize: 12 },
+  { name: "Midday", population: 20, color: "#5C6BC0", legendFontColor: "#7F7F7F", legendFontSize: 12 },
+  { name: "Evening", population: 40, color: "#81C784", legendFontColor: "#7F7F7F", legendFontSize: 12 },
+  { name: "Night", population: 5, color: "#64B5F6", legendFontColor: "#7F7F7F", legendFontSize: 12 },
 ];
 
-export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
+const chartConfig = {
+  backgroundGradientFrom: "#ffffff",
+  backgroundGradientTo: "#ffffff",
+  decimalPlaces: 0,
+  color: (opacity = 1) => `rgba(92, 107, 192, ${opacity})`,
+  labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
+  style: { borderRadius: 16 },
+  propsForDots: { r: "4", strokeWidth: "2", stroke: "#5C6BC0" }
+};
+
+export function AnalyticsScreen({ onBack }: { onBack: () => void }) {
   return (
-    <div className="h-full bg-background flex flex-col">
+    <View style={styles.container}>
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#5C6BC0] to-[#7986CB] pt-12 pb-8 px-6 rounded-b-[2rem]">
-        <div className="flex items-center justify-between mb-2">
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={onBack}
-            className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
-          >
-            <ArrowLeft className="w-6 h-6 text-white" />
-          </motion.button>
-          <h2 className="text-white">Analytics</h2>
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
-          >
-            <Calendar className="w-5 h-5 text-white" />
-          </motion.button>
-        </div>
-      </div>
+      <LinearGradient colors={["#5C6BC0", "#7986CB"]} style={styles.header}>
+        <SafeAreaView>
+          <View style={styles.headerTop}>
+            <TouchableOpacity onPress={onBack} style={styles.iconBtn}>
+              <ArrowLeft size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Analytics</Text>
+            <TouchableOpacity style={styles.iconBtn}>
+              <Calendar size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
-      {/* Analytics Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-        {/* Quick Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-3 gap-3"
-        >
-          <Card className="p-4 rounded-2xl border-0 shadow-md text-center">
-            <div className="text-2xl font-medium text-[#5C6BC0] mb-1">14</div>
-            <p className="text-muted-foreground text-xs">Total Meals</p>
-          </Card>
-          <Card className="p-4 rounded-2xl border-0 shadow-md text-center">
-            <div className="text-2xl font-medium text-[#FFB74D] mb-1">2.8kg</div>
-            <p className="text-muted-foreground text-xs">Food Used</p>
-          </Card>
-          <Card className="p-4 rounded-2xl border-0 shadow-md text-center">
-            <div className="text-2xl font-medium text-[#81C784] mb-1">98%</div>
-            <p className="text-muted-foreground text-xs">On Time</p>
-          </Card>
-        </motion.div>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Quick Stats Grid */}
+        <MotiView from={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={styles.statsRow}>
+          {[
+            { val: "14", label: "Total Meals", color: "#5C6BC0" },
+            { val: "2.8kg", label: "Food Used", color: "#FFB74D" },
+            { val: "98%", label: "On Time", color: "#81C784" }
+          ].map((stat, i) => (
+            <View key={i} style={styles.statCard}>
+              <Text style={[styles.statValue, { color: stat.color }]}>{stat.val}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+          ))}
+        </MotiView>
 
-        {/* Weekly Feeding Frequency */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3>Weekly Feeding</h3>
-            <TrendingUp className="w-5 h-5 text-[#81C784]" />
-          </div>
-          <Card className="p-4 rounded-2xl border-0 shadow-md">
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={weeklyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" />
-                <XAxis
-                  dataKey="day"
-                  stroke="#757575"
-                  style={{ fontSize: "12px" }}
-                />
-                <YAxis stroke="#757575" style={{ fontSize: "12px" }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#fff",
-                    border: "none",
-                    borderRadius: "12px",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: "12px" }} />
-                <Bar dataKey="Luna" fill="#5C6BC0" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="Charlie" fill="#FFB74D" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-        </motion.div>
+        {/* Bar Chart Section */}
+        <MotiView from={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 100 }}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Weekly Feeding</Text>
+            <TrendingUp size={20} color="#81C784" />
+          </View>
+          <View style={styles.chartCard}>
+            <BarChart
+              data={weeklyData}
+              width={screenWidth - 80}
+              height={220}
+              yAxisLabel=""
+              yAxisSuffix="g"
+              chartConfig={{...chartConfig, color: () => "#5C6BC0"}}
+              verticalLabelRotation={0}
+              fromZero
+              style={styles.chart}
+            />
+          </View>
+        </MotiView>
 
-        {/* Feeding Time Distribution */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <h3 className="mb-4">Most Active Feeding Times</h3>
-          <Card className="p-4 rounded-2xl border-0 shadow-md">
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={timeDistribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ percent }) =>
-                    `${(percent * 100).toFixed(0)}%`
-                  }
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {timeDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#fff",
-                    border: "none",
-                    borderRadius: "12px",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+        {/* Pie Chart Section */}
+        <MotiView from={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 200 }}>
+          <Text style={styles.sectionTitle}>Time Distribution</Text>
+          <View style={styles.chartCard}>
+            <PieChart
+              data={timeDistribution}
+              width={screenWidth - 48}
+              height={180}
+              chartConfig={chartConfig}
+              accessor={"population"}
+              backgroundColor={"transparent"}
+              paddingLeft={"15"}
+              absolute
+            />
+          </View>
+        </MotiView>
 
-            {/* Legend */}
-            <div className="space-y-2 mt-4">
-              {timeDistribution.map((item) => (
-                <div key={item.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {item.name}
-                    </span>
-                  </div>
-                  <span className="text-sm">{item.value}%</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </motion.div>
+        {/* Line Chart Section */}
+        <MotiView from={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 300 }}>
+          <Text style={styles.sectionTitle}>30-Day Trend</Text>
+          <View style={styles.chartCard}>
+            <LineChart
+              data={weeklyData}
+              width={screenWidth - 80}
+              height={200}
+              chartConfig={chartConfig}
+              bezier
+              style={styles.chart}
+            />
+          </View>
+        </MotiView>
 
-        {/* Consumption Trend */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <h3 className="mb-4">30-Day Consumption Trend</h3>
-          <Card className="p-4 rounded-2xl border-0 shadow-md">
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={weeklyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" />
-                <XAxis
-                  dataKey="day"
-                  stroke="#757575"
-                  style={{ fontSize: "12px" }}
-                />
-                <YAxis stroke="#757575" style={{ fontSize: "12px" }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#fff",
-                    border: "none",
-                    borderRadius: "12px",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="Luna"
-                  stroke="#5C6BC0"
-                  strokeWidth={3}
-                  dot={{ fill: "#5C6BC0", r: 4 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="Charlie"
-                  stroke="#FFB74D"
-                  strokeWidth={3}
-                  dot={{ fill: "#FFB74D", r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </Card>
-        </motion.div>
-
-        {/* Export Report */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="pb-6"
-        >
-          <Button className="w-full bg-[#5C6BC0] hover:bg-[#5C6BC0]/90 rounded-full h-12 flex items-center justify-center gap-2">
-            <Download className="w-5 h-5" />
-            Share Feeding Report (PDF)
-          </Button>
-        </motion.div>
-      </div>
-    </div>
+        {/* Export Button */}
+        <TouchableOpacity style={styles.exportBtn}>
+          <Download size={20} color="white" />
+          <Text style={styles.exportBtnText}>Share Report (PDF)</Text>
+        </TouchableOpacity>
+        
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F8F9FE" },
+  header: { paddingBottom: 30, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
+  headerTitle: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  iconBtn: { width: 40, height: 40, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 20 },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
+  statCard: { width: '31%', backgroundColor: 'white', padding: 16, borderRadius: 20, alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
+  statValue: { fontSize: 18, fontWeight: 'bold' },
+  statLabel: { fontSize: 10, color: '#9CA3AF', marginTop: 4 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
+  chartCard: { backgroundColor: 'white', borderRadius: 24, padding: 12, marginBottom: 24, alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
+  chart: { marginVertical: 8, borderRadius: 16 },
+  exportBtn: { backgroundColor: '#5C6BC0', borderRadius: 100, height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 20 },
+  exportBtnText: { color: 'white', fontWeight: 'bold', fontSize: 16 }
+});

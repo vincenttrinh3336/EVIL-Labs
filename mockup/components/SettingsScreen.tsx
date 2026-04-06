@@ -1,207 +1,158 @@
-import { motion } from "framer-motion";
-import { Card, Switch } from "@/lib/ui";
-import { ArrowLeft, Wifi, Bell, Moon, Globe, HelpCircle, Mail, Shield, ChevronRight } from "lucide-react";
+import React, { useState } from "react";
+import { 
+  StyleSheet, 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  ScrollView, 
+  Switch, 
+  SafeAreaView 
+} from "react-native";
+import { MotiView } from "moti";
+import { LinearGradient } from "expo-linear-gradient";
+import { 
+  ArrowLeft, 
+  Wifi, 
+  Bell, 
+  Moon, 
+  Globe, 
+  HelpCircle, 
+  Mail, 
+  Shield, 
+  ChevronRight 
+} from "lucide-react-native";
 
 interface SettingsScreenProps {
   onBack: () => void;
 }
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
+  const [pushEnabled, setPushEnabled] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
+
+  // Helper for setting rows to keep the main JSX clean
+  const SettingRow = ({ icon: Icon, color, title, sub, hasChevron, isSwitch, switchVal, onSwitch }: any) => (
+    <TouchableOpacity 
+      style={styles.row} 
+      activeOpacity={isSwitch ? 1 : 0.7} 
+      disabled={isSwitch}
+    >
+      <View style={styles.rowLead}>
+        <View style={[styles.iconContainer, { backgroundColor: `${color}15` }]}>
+          <Icon size={20} color={color} />
+        </View>
+        <View>
+          <Text style={styles.rowTitle}>{title}</Text>
+          {sub && <Text style={styles.rowSub}>{sub}</Text>}
+        </View>
+      </View>
+      {hasChevron && <ChevronRight size={20} color="#9CA3AF" />}
+      {isSwitch && (
+        <Switch 
+          value={switchVal} 
+          onValueChange={onSwitch}
+          trackColor={{ false: "#D1D5DB", true: "#5C6BC0" }}
+          thumbColor="white"
+        />
+      )}
+    </TouchableOpacity>
+  );
+
   return (
-    <div className="h-full bg-background flex flex-col">
+    <View style={styles.container}>
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#5C6BC0] to-[#7986CB] pt-12 pb-8 px-6 rounded-b-[2rem]">
-        <div className="flex items-center justify-between mb-2">
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={onBack}
-            className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
-          >
-            <ArrowLeft className="w-6 h-6 text-white" />
-          </motion.button>
-          <h2 className="text-white">Settings</h2>
-          <div className="w-10" />
-        </div>
-      </div>
+      <LinearGradient colors={["#5C6BC0", "#7986CB"]} style={styles.header}>
+        <SafeAreaView>
+          <View style={styles.headerContent}>
+            <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+              <ArrowLeft size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Settings</Text>
+            <View style={{ width: 40 }} />
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
-      {/* Settings Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+      <ScrollView style={styles.content}>
         {/* Device Settings */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <h3 className="mb-4">Device Settings</h3>
-          <Card className="rounded-2xl border-0 shadow-md overflow-hidden">
-            <button className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#5C6BC0]/10 rounded-full flex items-center justify-center">
-                  <Wifi className="w-5 h-5 text-[#5C6BC0]" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium">Wi-Fi Connection</p>
-                  <p className="text-muted-foreground text-sm">Home Network</p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-
-            <div className="border-t border-border" />
-
-            <button className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#FFB74D]/10 rounded-full flex items-center justify-center">
-                  <Shield className="w-5 h-5 text-[#FFB74D]" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium">Firmware Update</p>
-                  <p className="text-muted-foreground text-sm">Version 2.4.0</p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-
-            <div className="border-t border-border" />
-
-            <button className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#81C784]/10 rounded-full flex items-center justify-center">
-                  <Globe className="w-5 h-5 text-[#81C784]" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium">Location</p>
-                  <p className="text-muted-foreground text-sm">Living Room</p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-          </Card>
-        </motion.div>
+        <MotiView from={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 100 }}>
+          <Text style={styles.sectionLabel}>Device Settings</Text>
+          <View style={styles.card}>
+            <SettingRow icon={Wifi} color="#5C6BC0" title="Wi-Fi Connection" sub="Home Network" hasChevron />
+            <View style={styles.divider} />
+            <SettingRow icon={Shield} color="#FFB74D" title="Firmware Update" sub="Version 2.4.0" hasChevron />
+            <View style={styles.divider} />
+            <SettingRow icon={Globe} color="#81C784" title="Location" sub="Living Room" hasChevron />
+          </View>
+        </MotiView>
 
         {/* App Preferences */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <h3 className="mb-4">App Preferences</h3>
-          <Card className="rounded-2xl border-0 shadow-md overflow-hidden">
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#5C6BC0]/10 rounded-full flex items-center justify-center">
-                  <Bell className="w-5 h-5 text-[#5C6BC0]" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium">Push Notifications</p>
-                  <p className="text-muted-foreground text-sm">Get feeding alerts</p>
-                </div>
-              </div>
-              <Switch defaultChecked />
-            </div>
+        <MotiView from={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 200 }}>
+          <Text style={styles.sectionLabel}>App Preferences</Text>
+          <View style={styles.card}>
+            <SettingRow 
+              icon={Bell} color="#5C6BC0" title="Push Notifications" sub="Get feeding alerts" 
+              isSwitch switchVal={pushEnabled} onSwitch={setPushEnabled} 
+            />
+            <View style={styles.divider} />
+            <SettingRow 
+              icon={Moon} color="#64B5F6" title="Dark Mode" sub="Use system theme" 
+              isSwitch switchVal={darkMode} onSwitch={setDarkMode} 
+            />
+            <View style={styles.divider} />
+            <SettingRow icon={Globe} color="#FFB74D" title="Units" sub="Grams (g)" hasChevron />
+          </View>
+        </MotiView>
 
-            <div className="border-t border-border" />
+        {/* Support */}
+        <MotiView from={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 300 }}>
+          <Text style={styles.sectionLabel}>Support & About</Text>
+          <View style={styles.card}>
+            <SettingRow icon={HelpCircle} color="#5C6BC0" title="Help Center" hasChevron />
+            <View style={styles.divider} />
+            <SettingRow icon={Mail} color="#81C784" title="Contact Support" hasChevron />
+            <View style={styles.divider} />
+            <SettingRow icon={Shield} color="#FFB74D" title="Privacy Policy" hasChevron />
+            <View style={styles.divider} />
+            <View style={styles.row}>
+              <View style={styles.rowLead}>
+                <View style={[styles.iconContainer, { backgroundColor: '#F3F4F6' }]}>
+                  <Text style={{ fontSize: 20 }}>🍽️</Text>
+                </View>
+                <View>
+                  <Text style={styles.rowTitle}>Smart Pet Feeder</Text>
+                  <Text style={styles.rowSub}>Version 1.0.0</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </MotiView>
 
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#64B5F6]/10 rounded-full flex items-center justify-center">
-                  <Moon className="w-5 h-5 text-[#64B5F6]" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium">Dark Mode</p>
-                  <p className="text-muted-foreground text-sm">Use system theme</p>
-                </div>
-              </div>
-              <Switch />
-            </div>
-
-            <div className="border-t border-border" />
-
-            <button className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#FFB74D]/10 rounded-full flex items-center justify-center">
-                  <Globe className="w-5 h-5 text-[#FFB74D]" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium">Units</p>
-                  <p className="text-muted-foreground text-sm">Grams (g)</p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-          </Card>
-        </motion.div>
-
-        {/* Support & About */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <h3 className="mb-4">Support & About</h3>
-          <Card className="rounded-2xl border-0 shadow-md overflow-hidden">
-            <button className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#5C6BC0]/10 rounded-full flex items-center justify-center">
-                  <HelpCircle className="w-5 h-5 text-[#5C6BC0]" />
-                </div>
-                <p className="font-medium">Help Center</p>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-
-            <div className="border-t border-border" />
-
-            <button className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#81C784]/10 rounded-full flex items-center justify-center">
-                  <Mail className="w-5 h-5 text-[#81C784]" />
-                </div>
-                <p className="font-medium">Contact Support</p>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-
-            <div className="border-t border-border" />
-
-            <button className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#FFB74D]/10 rounded-full flex items-center justify-center">
-                  <Shield className="w-5 h-5 text-[#FFB74D]" />
-                </div>
-                <p className="font-medium">Privacy Policy</p>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-
-            <div className="border-t border-border" />
-
-            <div className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-muted/50 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">🍽️</span>
-                </div>
-                <div className="text-left">
-                  <p className="font-medium">Smart Pet Feeder</p>
-                  <p className="text-muted-foreground text-sm">Version 1.0.0</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </motion.div>
-
-        {/* Logout Button */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="pb-6"
-        >
-          <button className="w-full p-4 bg-destructive/10 text-destructive rounded-2xl font-medium hover:bg-destructive/20 transition-colors">
-            Log Out
-          </button>
-        </motion.div>
-      </div>
-    </div>
+        <TouchableOpacity style={styles.logoutBtn}>
+          <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
+        
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F8F9FE" },
+  header: { paddingBottom: 30, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+  headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10 },
+  headerTitle: { color: 'white', fontSize: 20, fontWeight: 'bold' },
+  backBtn: { width: 40, height: 40, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  content: { flex: 1, paddingHorizontal: 20 },
+  sectionLabel: { fontSize: 16, fontWeight: '600', color: '#4B5563', marginTop: 24, marginBottom: 12, marginLeft: 4 },
+  card: { backgroundColor: 'white', borderRadius: 24, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  rowLead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconContainer: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  rowTitle: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
+  rowSub: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  divider: { height: 1, backgroundColor: '#F3F4F6', marginLeft: 68 },
+  logoutBtn: { marginTop: 32, backgroundColor: '#FEE2E2', padding: 18, borderRadius: 20, alignItems: 'center' },
+  logoutText: { color: '#EF4444', fontWeight: 'bold', fontSize: 16 }
+});
