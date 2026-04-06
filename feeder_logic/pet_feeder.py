@@ -463,12 +463,18 @@ def levelCheck():
         if not lowfood: # Only notify once when it FIRST goes low
             send_push_notification(
                 title="Feeder Alert! ⚠️",
-                body="Food level is low. Please refill the container soon!"
+                body="Food level is low. Please refill the container soon!",
+                data_payload={"action": "food_low"} # Tells the app to update food level ui
             )
             update_db_food_status("low")
         lowfood = True
     else:
         if lowfood: # Reset status if you refilled it
+            send_push_notification(
+                title="Feeder Refilled! ⬆️",
+                body="You can safely dispense",
+                data_payload={"action": "food_refilled"} # Tells the app to update food level ui
+            )
             update_db_food_status("normal")
         lowfood = False
 
@@ -646,6 +652,12 @@ def run_detection_loop(camera, detector, args, stop_time):
             
             if len(detections) > 0:
                 print(f"[FPS: {fps:.1f}] Detected {len(detections)} pet(s):")
+                # 2. Notify App via Firebase
+                send_push_notification(
+                    title="Pet spotted!",
+                    body=f"A pet has been detected by the camera",
+                    data_payload={"action": "pet_detected"} # Optional: trigger a sound or a specific UI pop-up
+                    )
                 for det in detections:
                     print(f"  - {det.class_name} ({det.confidence:.2f})")
             
@@ -760,15 +772,36 @@ async def add_schedule(entry: ScheduleEntry):
     conn.close()
     return {"status": "success"}
 
+# To delete a schedule tuple from the database
+@app.delete("/delete-schedule/{id}")
+async def delete_schedule(id: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM schedules WHERE id = ?", (id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
 
+# To get feeding schedule from the database
 @app.get("/get-schedules")
 async def get_schedules():
     conn = sqlite3.connect(DB_PATH)
-    cursor = conn.execute("SELECT time, pet, seconds FROM schedules")
-    rows = cursor.fetchall() # Returns the list of tuples
+    # Added 'id' to the selection
+    cursor = conn.execute("SELECT id, time, pet, seconds FROM schedules")
+    rows = cursor.fetchall() 
     conn.close()
-    return rows
+    return rows # Format: [id, time, pet, seconds]
 
+# To get the food_level from the database
+@app.get("/get-food-level")
+async def get_food_level():
+    conn = sqlite3.connect(DB_PATH)
+    # Using row_factory can make this even cleaner, but keeping your current style:
+    cursor = conn.execute('SELECT value FROM status WHERE key = "food_level"')
+    row = cursor.fetchone()
+    conn.close()
+    
+    # Return a simple dictionary so the app can easily destructure it
+    return {"status": row[0] if row else "normal"}
 
 # To change cam_state based on user update
 @app.post("/set-camera")
