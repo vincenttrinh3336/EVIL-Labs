@@ -10,7 +10,9 @@ from threading import Thread, Lock
 # Dependencies for receival of schedule updates (FastAPI, sqlite3)
 import sqlite3
 from fastapi import FastAPI, HTTPException  # pip install fastapi uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import uvicorn
 
 
 # Dependencies for notifications using Firebase
@@ -32,15 +34,22 @@ import time
 import numpy as np
 import cv2
 import json
+import argparse
 from pathlib import Path
 from typing import List, Tuple, Optional
 from dataclasses import dataclass, asdict
 from collections import deque
 
 # Initializations for FastAPI and DB
-global app, DB_PATH
 app = FastAPI()
 DB_PATH = "feeder_schedule.db"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allows all devices (your phone) to connect
+    allow_credentials=True,
+    allow_methods=["*"], # Allows GET, POST, etc.
+    allow_headers=["*"], # Allows all headers
+)
 
 try:
     import tflite_runtime.interpreter as tflite
@@ -51,6 +60,43 @@ try:
     from picamera2 import Picamera2
 except ImportError:
     Picamera2 = None
+
+# GLOBAL Declarations and Initializations
+detector = None
+args = None
+
+feeding_times = []
+lowfood = False # True if food level is low, else False
+vision_active = False   # True if CV model should be running (depends on cam_state)
+vision_stop_time = 0
+lock = Lock()
+cam_state = True
+last_dispense_time = ""
+servo_angle = -240
+
+servo = None
+sensor = None
+pir = None
+
+# This function will be called by main() once to safely set up hardware
+def initialize_hardware():
+    global servo, sensor, pir
+    try:
+        if servo is None:
+            servo = Servo(27)
+            servo.value = 0.2
+        if sensor is None:
+            sensor = DistanceSensor(echo=24, trigger=23)
+        if pir is None:
+            pir = MotionSensor(17)
+            pir.when_motion = onMotion
+        print("Hardware initialized successfully.")
+    except Exception as e:
+        print(f"Hardware already initialized or Error: {e}")
+
+# Initializations for notifications
+cred = credentials.Certificate(key_path)    # Get json from firebase console
+
 
 @dataclass
 class Detection:
@@ -493,7 +539,7 @@ def getSchedule():
 
 
 def dispenseFood(time_str, pet, duration):
-    global cam_state, servo_angle, servo
+    global cam_state, servo_angle, servo, sensor
     feed_time = time_str
     pet_name = pet
     wait_time = float(duration) # Convert to float
@@ -897,29 +943,16 @@ def send_push_notification(title, body, data_payload=None):
 
 # MAIN FUNCTION
 def main():
-    # Initializations
-    global feeding_times, lowfood, vision_active, vision_stop_time, sensor, servo, pir, lock, cam_state, last_dispense_time, servo_angle
+    """Initializing hardware"""
+    initialize_hardware()
 
-    feeding_times = [("08:00", "Chai", "4"), ("12:00", "Scout", "5"), ("16:00", "Cherry", "3")] # Sample feeding times, (Time, Pet name, Seconds)
-    lowfood = False # True if food level is low, else False
-    vision_active = False   # True if CV model should be running (depends on cam_state)
-    vision_stop_time = 0
-    sensor = DistanceSensor(echo=24, trigger=23) # Adjust pin numbers if needed
-    servo = Servo(27) # Initialize servo on GPIO 27
-    servo.value = 0.2 # Set initial position to 0 degrees
-    pir = MotionSensor(17) # Initialize PIR motion sensor to GPIO 17
-    lock = Lock()
-    cam_state = True
-    last_dispense_time = ""
-    servo_angle = -240
+    feeding_times = [("08:00", "Chai", "4"), ("12:00", "Scout", "5"), ("16:00", "Cherry", "3")] # Sample feeding times
 
-    # Initializations for notifications
-    global cred
-    cred = credentials.Certificate(key_path)    # Get json from firebase console
+    # Initializing Firebase
     firebase_admin.initialize_app(cred)
 
     """Setting up Computer Vision"""
-    import argparse
+    global detector, args
     
     parser = argparse.ArgumentParser(description='Raspberry Pi Pet Detection')
     parser.add_argument('--model', type=str, required=True, help='Path to TFLite model')
@@ -957,10 +990,15 @@ def main():
     # Register PIR callback
     pir.when_motion = onMotion # Callback registered. gpiozero creates an internal thread that monitors the associated GPIO pins.
 
-    print("System running...")
-    pause()
+    print("System logic threads started...")
 
 
 if __name__ == '__main__':
+    # Initializeing the hardware, threads, and PIR
     main()
+
+    # 2. Start the API Server (blocking)
+    print("Starting API Server on port 8000...")
+    uvicorn.run("pet_feeder:app", host="0.0.0.0", port=8000, reload=False)
+
 
