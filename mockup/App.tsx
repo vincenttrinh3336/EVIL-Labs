@@ -17,14 +17,14 @@ import { SplashScreen } from "./components/SplashScreen";
 import { OnboardingScreens } from "./components/OnboardingScreens";
 import { LoginScreen } from "./components/LoginScreen";
 import { HomeDashboard } from "./components/HomeDashboard";
-import { LiveFeedScreen } from "./components/LiveFeedScreen";
+import { VideoListScreen } from "./components/VideoListScreen";
 import { NotificationsScreen } from "./components/NotificationsScreen";
 import { HistoryScreen } from "./components/HistoryScreen";
 import { SchedulesScreen } from "./components/SchedulesScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { AnalyticsScreen } from "./components/AnalyticsScreen";
 
-type Screen = "splash" | "onboarding" | "login" | "home" | "live" | "history" | "notifications" | "settings" | "schedules" | "history";
+type Screen = "splash" | "onboarding" | "login" | "home" | "video" | "history" | "notifications" | "settings" | "schedules" | "history";
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("splash");
@@ -51,18 +51,30 @@ export default function App() {
   // 1. Handle notification tap when app was in BACKGROUND
   const unsubscribeOpenedApp = onNotificationOpenedApp(messaging, (remoteMessage) => {
     console.log('App opened via notification:', remoteMessage.data);
-    if (remoteMessage.data?.action === 'refresh_logs') {
+
+    const action = remoteMessage.data?.action;
+
+    if (action === 'refresh_logs') {
       setCurrentScreen('history'); 
-    }
+    } else if (action === 'video_available') {
+    // Navigate to the new VideoList screen and pass the filename
+    setCurrentScreen('video'); 
+    // If you use a state manager or global props, save remoteMessage.data.file_name here
+  }
   });
 
   // 2. Handle notification tap when app was completely CLOSED (Quit state)
   getInitialNotification(messaging).then((remoteMessage) => {
     if (remoteMessage) {
+      const action = remoteMessage.data?.action;
       console.log('App launched from quit state:', remoteMessage.data);
-      if (remoteMessage.data?.action === 'refresh_logs') {
+
+      if (action === 'refresh_logs') {
         setCurrentScreen('history');
-      }
+      } else if (action === 'video_available') {
+      setCurrentScreen('video');
+      // Ensure the UI knows which specific video triggered the launch
+    }
     }
   });
 
@@ -87,7 +99,7 @@ export default function App() {
       case "home": return <HomeDashboard onNavigate={setCurrentScreen} />;
       case "analytics": return <AnalyticsScreen onBack={() => setCurrentScreen("home")} />;
       case "history": return <HistoryScreen onNavigate={setCurrentScreen} />;
-      case "live": return <LiveFeedScreen onBack={() => setCurrentScreen("home")} />;
+      case "video": return <VideoListScreen onBack={() => setCurrentScreen("home")} />;
       case "notifications": return <NotificationsScreen onBack={() => setCurrentScreen("home")} />;
       case "schedules": return <SchedulesScreen onBack={() => setCurrentScreen("home")} />;
       case "settings": return <SettingsScreen onBack={() => setCurrentScreen("home")} />;

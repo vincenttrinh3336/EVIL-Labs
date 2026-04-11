@@ -15,8 +15,8 @@ const { width } = Dimensions.get('window');
 const GRAMS_PER_SECOND = 15;
 
 export function HistoryScreen({ onNavigate }) {
-const [isOffline, setIsOffline] = useState(false);
-  const [showOfflineAlert, setShowOfflineAlert] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
+  const [showOfflineAlert, setShowOfflineAlert] = useState(false);
   const insets = useSafeAreaInsets();
   const [allLogs, setAllLogs] = useState([]);
   const [filteredLogs, setFilteredLogs] = useState([]);
@@ -26,19 +26,6 @@ const [isOffline, setIsOffline] = useState(false);
 
   // Animation value for the swipe-up gesture
   const panY = useRef(new Animated.Value(0)).current;
-
-  // 1. Check connection status
-  useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const res = await fetch(`${RPI_URL}/feeding-logs`, { signal: AbortSignal.timeout(3000) });
-        if (res.ok) setIsOffline(false);
-      } catch (e) {
-        setIsOffline(true);
-      }
-    };
-    checkStatus();
-  }, []);
 
   // 2. Swipe-to-dismiss logic
   const panResponder = useRef(
@@ -58,16 +45,24 @@ const [isOffline, setIsOffline] = useState(false);
   ).current;
 
   const fetchLogs = useCallback(async () => {
-    try {
-      const response = await fetch(`${RPI_URL}/feeding-logs`);
+  setLoading(true); // Ensure loading shows
+  try {
+    const response = await fetch(`${RPI_URL}/feeding-logs`);
+    if (response.ok) {
       const data = await response.json();
       setAllLogs(data);
-    } catch (err) {
-      console.error("Fetch Error:", err);
-    } finally {
-      setLoading(false);
+      setIsOffline(false); // SUCCESS: We are online
+    } else {
+      setIsOffline(true); // Server responded but with error
     }
-  }, []);
+  } catch (err) {
+    console.error("Fetch Error:", err);
+    setIsOffline(true); // Network failed
+    setShowOfflineAlert(true);
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   // Firebase listener for auto-refresh
   useEffect(() => {

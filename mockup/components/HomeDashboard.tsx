@@ -251,7 +251,7 @@ export function HomeDashboard({ onNavigate }: { onNavigate: (screen: string) => 
         >
           <TouchableOpacity 
             activeOpacity={0.9} 
-            onPress={() => onNavigate("live")} 
+            onPress={() => onNavigate("video")} 
             style={styles.liveCard}
           >
             <Image 

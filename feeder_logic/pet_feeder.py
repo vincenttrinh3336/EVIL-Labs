@@ -11,6 +11,7 @@ from threading import Thread, Lock
 import sqlite3
 from fastapi import FastAPI, HTTPException  # pip install fastapi uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import uvicorn
 
@@ -20,8 +21,14 @@ import os
 import firebase_admin   # pip install firebase-admin
 from firebase_admin import credentials, messaging
 
-# Get the directory where the script is located
+# Setting up necessary directory and file paths
 base_dir = os.path.dirname(os.path.abspath(__file__))
+
+video_folder = os.path.join(base_dir, "captured_videos")
+# Create the folder immediately if it doesn't exist
+if not os.path.exists(video_folder):
+    os.makedirs(video_folder)
+
 key_path = os.path.join(base_dir, "serviceAccountKey.json")
 
 
@@ -625,6 +632,89 @@ def activateVision():
     else: print("CV deactivated by user")
 
 
+# To delete old clips stored on the pi after days_to_keep number of days
+def cleanup_old_videos(days_to_keep=3):
+    """
+    Deletes video files in the video_folder that are older than the specified days.
+    """
+    print(f"Running video cleanup (keeping last {days_to_keep} days)...")
+    
+    # Calculate the cutoff time in seconds
+    now = time.time()
+    cutoff = now - (days_to_keep * 86400) # 86400 seconds in a day
+
+    files_deleted = 0
+    
+    try:
+        # List all files in the video directory
+        for filename in os.listdir(video_folder):
+            file_path = os.path.join(video_folder, filename)
+            
+            # Only look at files (not folders) ending in .mp4
+            if os.path.isfile(file_path) and filename.endswith(".mp4"):
+                file_creation_time = os.path.getmtime(file_path)
+                
+                if file_creation_time < cutoff:
+                    os.remove(file_path)
+                    files_deleted += 1
+                    print(f"Deleted old video: {filename}")
+        
+        print(f"Cleanup complete. Removed {files_deleted} files.")
+    except Exception as e:
+        print(f"Error during video cleanup: {e}")
+
+
+# To convert cached video clip of pet into a mp4 for transfer
+def save_and_send_clip(frames, fps_number):
+    """
+    Converts a list of frames into an .mp4 video and notifies the app.
+    """
+    if not frames:
+        return
+
+    # 1. Define the filename and path
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    video_filename = f"pet_clip_{timestamp}.mp4"
+
+    video_path = os.path.join(video_folder, video_filename)
+
+    # 2. Get frame dimensions from the first frame
+    height, width, layers = frames[0].shape
+    size = (width, height)
+
+    # 3. Initialize VideoWriter 
+    # 'avc1' or 'mp4v' are common codecs for .mp4 files
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(video_path, fourcc, fps_number, size) # fps_number = fps calculated in run_detection_loop
+
+    print(f"Stitching {len(frames)} frames into {video_filename}...")
+    
+    try:
+        for frame in frames:
+            out.write(frame)
+        out.release()
+        cv2.imwrite(video_path.replace(".mp4", ".jpg"), frames[0])
+        print(f"Video saved successfully at {video_path}")
+
+        # 4. Notify the App via Firebase
+        # Note: In a production setup, you would typically upload this file 
+        # to cloud storage and send the download URL in the data_payload.
+        send_push_notification(
+            title="Video Clip Ready! 🎥",
+            body="A 10-second clip of your pet has been recorded.", # Update to match clip length
+            data_payload={
+                "action": "video_available",
+                "file_name": video_filename
+            }
+        )
+    except Exception as e:
+        print(f"Error saving video: {e}")
+    
+    # After saving the new one, check if old ones need to go within a new thread
+    Thread(target=cleanup_old_videos, args=(3,), daemon=True).start()
+
+
+# Runs the tflite model based on cam_state and if current_time <= current_stop_limit
 def run_detection_loop(camera, detector, args, stop_time):
     global vision_stop_time, lock, cam_state
     # Initialize local loop variables
@@ -634,6 +724,11 @@ def run_detection_loop(camera, detector, args, stop_time):
     low_fps_warning_shown = False
     no_detection_count = 0
     no_detection_warning_interval = 100
+
+    # Initialize buffers
+    # If loop runs at ~10 FPS, maxlen=100 is 10 seconds of video
+    video_cache = deque(maxlen=100) # Change maxlen based on framerate
+    detection_timestamps = deque()
 
     print("\nStarting detection loop...")
     print("Press Ctrl+C to stop")
@@ -661,22 +756,30 @@ def run_detection_loop(camera, detector, args, stop_time):
             # Capture frame
             frame = camera.capture_array()
             frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            '''
-            someGaurd = True
+            
+            # Cache the current frame
+            video_cache.append(frame.copy())
 
-            while (someGaurd):
-                app.stream(frame_bgr)
-                
-                newStatusFromApp = app.endStream()
-                
-                if (newStatusFromApp == endFrame):
-                    someGaurd = False
-            
-            '''
-            
             # Run detection
             detections = detector.detect(frame_bgr)
             
+            if len(detections) > 0:
+                current_t = time.time()
+                detection_timestamps.append(current_t)
+                
+                # 2. Clean up old timestamps (older than 10s)
+                while detection_timestamps and detection_timestamps[0] < current_t - 10:
+                    detection_timestamps.popleft()
+                
+                # 3. Check the trigger condition
+                if len(detection_timestamps) >= 4:
+                    print("Threshold met: 4 detections in 10s. Saving clip...")
+                    save_and_send_clip(list(video_cache), fps) # Function to stitch and send
+                    
+                    with lock:
+                        cam_state = False # Stop the model/loop
+                    break
+
             # Track no detections
             if len(detections) == 0:
                 no_detection_count += 1
@@ -728,6 +831,7 @@ def run_detection_loop(camera, detector, args, stop_time):
         print("\n\nShutting down gracefully...")
 
 
+# Runs in a thread - sets up camera and calls run_detection_loop based on vision_active and cam_state
 def visionLoop(detector, args):
     global vision_active, vision_stop_time, lock, cam_state
 
@@ -835,6 +939,7 @@ async def add_schedule(entry: ScheduleEntry):
     conn.close()
     return {"status": "success"}
 
+
 # To delete a schedule tuple from the database
 @app.delete("/delete-schedule/{id}")
 async def delete_schedule(id: int):
@@ -843,6 +948,7 @@ async def delete_schedule(id: int):
     conn.commit()
     conn.close()
     return {"status": "success"}
+
 
 # To get feeding schedule from the database
 @app.get("/get-schedules")
@@ -853,6 +959,7 @@ async def get_schedules():
     rows = cursor.fetchall() 
     conn.close()
     return rows # Format: [id, time, pet, seconds]
+
 
 # To get the food_level from the database
 @app.get("/get-food-level")
@@ -865,6 +972,7 @@ async def get_food_level():
     
     # Return a simple dictionary so the app can easily destructure it
     return {"status": row[0] if row else "normal"}
+
 
 # To change cam_state based on user update
 @app.post("/set-camera")
@@ -896,6 +1004,7 @@ async def get_status():
             "vision_active": vision_active
         }
     
+
 # GET request that returns the last 7 days of feeding history entries
 @app.get("/feeding-logs")
 async def get_logs():
@@ -928,6 +1037,46 @@ async def delete_log(log_id: int):
     conn.commit()
     conn.close()
     return {"status": "deleted"}
+
+
+# GET request to receive a mp4 file from the raspberry pi
+@app.get("/videos/{file_name}")
+async def get_video(file_name: str):
+    """
+    Serves a specific video file from the Pi's storage.
+    """
+    # Create the full path to the video file
+    video_path = os.path.join(video_folder, file_name)
+
+    # Check if the file actually exists to avoid a 500 error
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    # media_type="video/mp4" tells the phone's player what kind of file it is
+    return FileResponse(video_path, media_type="video/mp4")
+
+
+# GET request to receive a JSON list of the name and creation time of all videos in video_folder
+@app.get("/list-videos")
+async def list_videos():
+    try:
+        files = []
+        for filename in os.listdir(video_folder):
+            if filename.endswith(".mp4"):
+                path = os.path.join(video_folder, filename)
+                # Get the creation time
+                timestamp = os.path.getmtime(path)
+                files.append({
+                    "file_name": filename,
+                    "timestamp": timestamp,
+                    "size": os.path.getsize(path)
+                })
+        
+        # Sort by newest first
+        files.sort(key=lambda x: x['timestamp'], reverse=True)
+        return files
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def send_push_notification(title, body, data_payload=None):
