@@ -661,6 +661,18 @@ def run_detection_loop(camera, detector, args, stop_time):
             # Capture frame
             frame = camera.capture_array()
             frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            '''
+            someGaurd = True
+
+            while (someGaurd):
+                app.stream(frame_bgr)
+                
+                newStatusFromApp = app.endStream()
+                
+                if (newStatusFromApp == endFrame):
+                    someGaurd = False
+            
+            '''
             
             # Run detection
             detections = detector.detect(frame_bgr)
