@@ -174,6 +174,10 @@ class PetDetector:
         input_shape = self.input_details[0]['shape']
         self.input_height = input_shape[1]
         self.input_width = input_shape[2]
+        self.input_dtype = self.input_details[0]['dtype']
+
+        # Check if model is quantized (INT8 or UINT8)
+        self.is_quantized = self.input_dtype in (np.int8, np.uint8)
         
         print(f"Model loaded successfully")
         print(f"Input size: {self.input_width}x{self.input_height}")
@@ -182,27 +186,26 @@ class PetDetector:
             print(f"Performance metrics: ENABLED")
 
     def preprocess(self, frame: np.ndarray) -> np.ndarray:
-        """
-        Preprocess frame for model input
-        
-        Args:
-            frame: Input frame (BGR format from camera)
-            
-        Returns:
-            Preprocessed frame ready for inference
-        """
         # Resize to model input size
-        resized = cv2.resize(frame, (self.input_width, self.input_height))
+        resized = cv2.resize(frame, (self.input_width, self.input_height), interpolation=cv2.INTER_LINEAR)
         
         # Convert BGR to RGB
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         
-        # Normalize to [0, 1] range
-        normalized = rgb.astype(np.float32) / 255.0
-        
-        # Add batch dimension
-        input_data = np.expand_dims(normalized, axis=0)
-        
+        # Handle quantized vs float models
+        if self.is_quantized:
+            if self.input_dtype == np.int8:
+                # INT8 quantized model expects int8 input [-128, 127]
+                # Convert to float, shift by 128, then cast to int8
+                input_data = np.expand_dims((rgb.astype(np.float32) - 128).astype(np.int8), axis=0)
+            else:
+                # UINT8 quantized model expects uint8 input [0, 255]
+                input_data = np.expand_dims(rgb.astype(np.uint8), axis=0)
+        else:
+            # Float model expects normalized float32 input [0.0, 1.0]
+            normalized = rgb.astype(np.float32) / 255.0
+            input_data = np.expand_dims(normalized, axis=0)
+    
         return input_data
 
     def detect(self, frame: np.ndarray) -> List[Detection]:
@@ -232,6 +235,12 @@ class PetDetector:
         
         # Get output tensor
         output_data = self.interpreter.get_tensor(self.output_details[0]['index'])
+
+        # Dequantize output if model is quantized
+        if self.is_quantized:
+            output_scale = self.output_details[0]['quantization_parameters']['scales'][0]
+            output_zero_point = self.output_details[0]['quantization_parameters']['zero_points'][0]
+            output_data = (output_data.astype(np.float32) - output_zero_point) * output_scale
         
         # Postprocess results
         postprocess_start = time.time()
@@ -665,7 +674,7 @@ def cleanup_old_videos(days_to_keep=3):
 
 
 # To convert cached video clip of pet into a mp4 for transfer
-def save_and_send_clip(frames, fps_number):
+def save_and_send_clip(frames):
     """
     Converts a list of frames into an .mp4 video and notifies the app.
     """
@@ -685,7 +694,8 @@ def save_and_send_clip(frames, fps_number):
     # 3. Initialize VideoWriter 
     # 'avc1' or 'mp4v' are common codecs for .mp4 files
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(video_path, fourcc, fps_number, size) # fps_number = fps calculated in run_detection_loop
+    playback_fps = 20
+    out = cv2.VideoWriter(video_path, fourcc, playback_fps, size) # fps_number = fps calculated in run_detection_loop
 
     print(f"Stitching {len(frames)} frames into {video_filename}...")
     
@@ -720,15 +730,17 @@ def run_detection_loop(camera, detector, args, stop_time):
     # Initialize local loop variables
     fps_counter = 0
     fps_start_time = time.time()
-    fps = 0.0
+    fps = 9.0
     low_fps_warning_shown = False
     no_detection_count = 0
     no_detection_warning_interval = 100
 
     # Initialize buffers
-    # If loop runs at ~10 FPS, maxlen=100 is 10 seconds of video
-    video_cache = deque(maxlen=100) # Change maxlen based on framerate
+    # Loop usually runs at 1.6 fps. 30 frame buffer = 20 seconds of real time video
+    video_cache = deque(maxlen=160) # Change maxlen based on framerate
     detection_timestamps = deque()
+
+    last_notification_time = 0  # Keeps track of the time of the last "Pet spotted" notif
 
     print("\nStarting detection loop...")
     print("Press Ctrl+C to stop")
@@ -768,13 +780,20 @@ def run_detection_loop(camera, detector, args, stop_time):
                 detection_timestamps.append(current_t)
                 
                 # 2. Clean up old timestamps (older than 10s)
-                while detection_timestamps and detection_timestamps[0] < current_t - 10:
+                while detection_timestamps and detection_timestamps[0] < current_t - 30:
                     detection_timestamps.popleft()
                 
                 # 3. Check the trigger condition
-                if len(detection_timestamps) >= 4:
-                    print("Threshold met: 4 detections in 10s. Saving clip...")
-                    save_and_send_clip(list(video_cache), fps) # Function to stitch and send
+                if len(detection_timestamps) >= 4 and len(video_cache) > 30:
+                    print("Pet detected! Recording 8 more seconds of footage...")
+                    # Record for 5 more seconds (roughly 8 more frames at 1.6 FPS)
+                    for _ in range(13):
+                        frame = camera.capture_array()
+                        video_cache.append(frame.copy())
+                        sleep(0.5) # Small delay to match your processing speed
+
+                    print("Saving full clip.")
+                    save_and_send_clip(list(video_cache)) # Function to stitch and send
                     
                     with lock:
                         cam_state = False # Stop the model/loop
@@ -818,15 +837,20 @@ def run_detection_loop(camera, detector, args, stop_time):
             
             if len(detections) > 0:
                 print(f"[FPS: {fps:.1f}] Detected {len(detections)} pet(s):")
-                # 2. Notify App via Firebase
-                send_push_notification(
-                    title="Pet spotted!",
-                    body=f"A pet has been detected by the camera",
-                    data_payload={"action": "pet_detected"} # Optional: trigger a sound or a specific UI pop-up
+                # Check if 10 minutes (600 seconds) have passed since the last alert
+                current_time = time.time()
+                if current_time - last_notification_time > 600: 
+                    # 2. Notify App via Firebase
+                    send_push_notification(
+                        title="Pet spotted!",
+                        body=f"A pet has been detected by the camera",
+                        data_payload={"action": "pet_detected"} # Optional: trigger a sound or a specific UI pop-up
                     )
+                    last_notification_time = current_time # Update the tracker
+        
                 for det in detections:
                     print(f"  - {det.class_name} ({det.confidence:.2f})")
-            
+
     except KeyboardInterrupt:
         print("\n\nShutting down gracefully...")
 
@@ -847,9 +871,19 @@ def visionLoop(detector, args):
                 # 1. SETUP: Start camera ONLY when needed
                 camera = Picamera2()
                 config = camera.create_preview_configuration(
-                    main={"size": (640, 480), "format": "RGB888"}
+                    main={"size": (640, 480), "format": "BGR888"}
                 )
                 camera.configure(config)
+
+                # Set camera controls for better performance
+                camera.set_controls({
+                    "ExposureTime": 60000,  # 60ms exposure
+                    "AnalogueGain": 12.0,
+                    "ExposureValue": 2.0,
+                    "AeEnable": True,  # Auto exposure
+                    "AwbEnable": True,  # Auto white balance
+                })
+
                 camera.start()
                 sleep(2) # Warm up
                 print("Camera initialized successfully")
@@ -1077,6 +1111,20 @@ async def list_videos():
         return files
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+# DELETE request to delete a specified video clip
+@app.delete("/delete-video/{file_name}")
+async def delete_video_file(file_name: str):
+    file_path = os.path.join(video_folder, file_name)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        # Also remove the thumbnail
+        thumb_path = file_path.replace(".mp4", ".jpg")
+        if os.path.exists(thumb_path):
+            os.remove(thumb_path)
+        return {"status": "success"}
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 def send_push_notification(title, body, data_payload=None):

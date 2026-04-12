@@ -16,17 +16,36 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourname.petfeeder"
+      "bundleIdentifier": "com.yourname.petfeeder",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow PetByte Autofeeder to access your photos.",
+        "NSPhotoLibraryAddUsageDescription": "Allow PetByte Autofeeder to save pet clips to your gallery."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.yourname.petfeeder"
+      "package": "com.yourname.petfeeder",
+      "permissions": [
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE",
+        "MEDIA_LIBRARY"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow PetByte Autofeeder to access your photos.",
+          "savePhotosPermission": "Allow PetByte Autofeeder to save photos.",
+          "isStandard": true
+        }
+      ]
+    ]
   }
 }
