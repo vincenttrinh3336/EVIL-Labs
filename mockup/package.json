@@ -9,12 +9,14 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@cerebras/cerebras_cloud_sdk": "^1.64.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/slider": "5.0.1",
     "@react-native-firebase/app": "^24.0.0",
     "@react-native-firebase/messaging": "^24.0.0",
     "clsx": "^2.1.1",
     "expo": "~54.0.0",
+    "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.20",
     "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~17.0.10",

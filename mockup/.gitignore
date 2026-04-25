@@ -50,6 +50,7 @@ coverage/
 .env.test.local
 .env.production.local
 android/app/google-services.json
+.env
 
 # IDE
 .vscode/

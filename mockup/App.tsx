@@ -23,6 +23,7 @@ import { HistoryScreen } from "./components/HistoryScreen";
 import { SchedulesScreen } from "./components/SchedulesScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { AnalyticsScreen } from "./components/AnalyticsScreen";
+import { AnalyticsTestScreen } from "./components/AnalyticsTestScreen";
 import { EditImageScreen } from "./components/EditImageScreen";
 
 type Screen = string;
@@ -149,11 +150,12 @@ export default function App() {
       });
     }
     switch (screenName) {
-      case "splash": return <SplashScreen onGetStarted={() => setCurrentScreen("onboarding")} />;
-      case "onboarding": return <OnboardingScreens onComplete={() => setCurrentScreen("login")} />;
-      case "login": return <LoginScreen onLogin={() => setCurrentScreen("home")} />;
+      case "splash": return <SplashScreen onGetStarted={() => setCurrentScreen("login")} />;
+      case "login": return <LoginScreen onLogin={() => setCurrentScreen("onboarding")} />;
+      case "onboarding": return <OnboardingScreens onComplete={() => setCurrentScreen("home")} />;
       case "home": return <HomeDashboard onNavigate={setCurrentScreen} routeParams={params} />;
-      case "analytics": return <AnalyticsScreen onBack={() => setCurrentScreen("home")} />;
+      case "analytics": return <AnalyticsScreen onBack={() => setCurrentScreen("home")} onNavigate={(screen) => setCurrentScreen(screen)} />;
+      case "analyticsTest": return <AnalyticsTestScreen onBack={() => setCurrentScreen('home')} onNavigate={setCurrentScreen} />;
       case "history": return <HistoryScreen onNavigate={setCurrentScreen} />;
       case "video": return <VideoListScreen onNavigate={setCurrentScreen} />;
       case "editImage":

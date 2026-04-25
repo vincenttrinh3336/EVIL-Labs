@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { getMessaging, onMessage } from '@react-native-firebase/messaging';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { 
@@ -26,12 +26,15 @@ import {
   Heart,
   Archive, 
   Bell, 
-  Utensils, 
+  Utensils,
+  UtensilsCrossed,
   Clock, 
   BarChart3, 
-  Wifi, 
+  Wifi,
+  WifiOff,
   Settings,
   Camera,
+  CameraOff,
   Image as ImageIcon,
   RotateCcw,
   RotateCw,
@@ -44,34 +47,26 @@ const { width } = Dimensions.get("window");
 const GRAMS_PER_SECOND = 15;
 
 // Add to separate utils file later
-  const getNextFeeding = (schedules: any[]) => {
+const getNextFeeding = (schedules: any[]) => {
   if (!schedules || schedules.length === 0) return { label: "None", time: "--:--" };
 
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  // Use the first item provided by the backend
+  const next = schedules[0];
 
-  // Convert all schedules to minutes from midnight
-  const mappedSchedules = schedules.map(s => {
-    // Handling both tuple [id, time, pet, sec] and object {time, pet} formats
-    const timeStr = Array.isArray(s) ? s[1] : s.time;
-    const petName = Array.isArray(s) ? s[2] : s.pet;
+  // Logic to extract data whether it's an object {id, time, pet, ...} or the old tuple [id, time, pet, ...]
+  const isArray = Array.isArray(next);
+  
+  // Extract values using the keys defined in your Python @app.get("/get-next-schedules")
+  const timeStr = isArray ? next[1] : next.time;
+  const petName = isArray ? next[2] : next.pet; 
 
-    const [hrs, mins] = timeStr.split(':').map(Number);
-    return { label: petName, time: timeStr, totalMinutes: hrs * 60 + mins };
-  });
+  // Fallback check: if somehow data is missing
+  if (!timeStr) return { label: "None", time: "--:--" };
 
-  // Filter for feedings later today
-  let futureFeedings = mappedSchedules.filter(s => s.totalMinutes > currentMinutes);
-
-  // Sort by time
-  futureFeedings.sort((a, b) => a.totalMinutes - b.totalMinutes);
-
-  // If no more feedings today, the next one is the first one tomorrow (the smallest totalMinutes)
-  const next = futureFeedings.length > 0 
-    ? futureFeedings[0] 
-    : mappedSchedules.sort((a, b) => a.totalMinutes - b.totalMinutes)[0];
-
-  return { label: next.label, time: next.time };
+  return { 
+    label: petName || "Unknown", 
+    time: timeStr 
+  };
 };
 // End of utils file
 
@@ -88,6 +83,68 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
   const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1597105888983-ae503ec1ef3e?q=80&w=1080";
   const [liveCardImage, setLiveCardImage] = useState(DEFAULT_IMAGE);
   const [isCameraRunning, setIsCameraRunning] = useState(false);
+  const [camEnabled, setCamEnabled] = useState(true); // Default to true
+  const [isConnected, setIsConnected] = useState(true);
+  const [storedPets, setStoredPets] = useState<any[]>([]);
+  const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
+
+  // Standalone pet loader
+  const loadLocalPets = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem('stored_pets');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setStoredPets(parsed);
+        
+        // Only set a default if the current petName is empty 
+        // to avoid overwriting a user's manual selection
+        if (parsed.length > 0 && !petName) {
+          setPetName(parsed[0].name);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load local pets:", e);
+    }
+  }, [petName]);
+
+  const fetchDashboardData = useCallback(async () => {
+      try {
+        // Fetch most recent feeding log
+        const logsRes = await fetch(`${RPI_URL}/filtered-feeding-logs?limit=1`);
+        if(logsRes.ok){
+          const logs = await logsRes.json();
+          setIsConnected(true);
+          setLastFeeding(logs.length > 0 ? logs[0] : null);
+        } else{
+          setIsConnected(false);
+        }
+        
+        // Fetch next schedule
+        const schedRes = await fetch(`${RPI_URL}/get-next-schedules?next_only=true`);
+        const nextSchedData = await schedRes.json();
+        setSchedules(nextSchedData);
+
+        // Fetch Food Level
+        const levelRes = await fetch(`${RPI_URL}/get-food-level`);
+        const levelData = await levelRes.json();
+        if (levelData.status) {
+          setFoodLevel(levelData.status);
+        }
+
+        // Fetch Camera Status
+        const statusRes = await fetch(`${RPI_URL}/get-status`);
+        const statusData = await statusRes.json();
+        
+        // Explicitly set the state based on cv_on
+        setIsCameraRunning(statusData.cv_on === true);
+        setCamEnabled(statusData.cam_state);
+
+      } catch (e) {
+        console.error("Dashboard sync failed:", e);
+        setIsCameraRunning(false); 
+        setIsConnected(false);
+      }
+    }, []);
 
   // Watch for incoming updatedImage from navigation
   useEffect(() => {
@@ -112,7 +169,7 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
     loadSavedImage();
   }, []);
 
-  // 2. Create a helper to update and save the image
+  // Create a helper to update and save the image
   const updateLiveCardImage = async (newUri: string) => {
     try {
       setLiveCardImage(newUri);
@@ -124,55 +181,20 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
 
   // 2. Fetch current schedules from Raspberry Pi on mount
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        // Fetch Feeding Logs for the "Last Feeding" stat
-        const logsRes = await fetch(`${RPI_URL}/feeding-logs`);
-        const logs = await logsRes.json();
-        
-        if (logs && logs.length > 0) {
-          // Sort by date/time to ensure we have the absolute newest entry
-          const sortedLogs = [...logs].sort((a, b) => 
-            new Date(b.date).getTime() - new Date(a.date).getTime()
-          );
-          setLastFeeding(sortedLogs[0]);
-        } else {
-          setLastFeeding(null);
-        }
+    loadLocalPets(); // Loads pets from phone storage immediately
+    fetchDashboardData(); // Fetches data from RPi
 
-        const schedRes = await fetch(`${RPI_URL}/get-schedules`);
-        const schedulesData = await schedRes.json();
-        setSchedules(await schedulesData);
-
-        // Fetch current food level from DB
-        const levelRes = await fetch(`${RPI_URL}/get-food-level`);
-        const levelData = await levelRes.json();
-        if (levelData.status) {
-          setFoodLevel(levelData.status);
-
-        // Fetch Camera Status
-        const statusRes = await fetch(`${RPI_URL}/get-status`);
-        const statusData = await statusRes.json();
-        
-        // Set true only if the loop boolean is true
-        setIsCameraRunning(statusData.run_detection_loop === true);
-        }
-      } catch (e) {
-        console.error("Initial fetch failed:", e);
-        setIsCameraRunning(false); // Default to false on error
-      }
-    };
-    fetchDashboardData();
-
-    
-
-
-    // 2. Real-time Firebase Listener
+    // Real-time Firebase Listener
     const messaging = getMessaging();
     const unsubscribe = onMessage(messaging, async (remoteMessage) => {
       const action = remoteMessage.data?.action;
       
-      if (action === "refresh_logs" || action === "food_low" || action === "food_refilled" || action === "camera_status_changed") {
+      if (action === "vision_toggle") {
+        // Wait 300ms for the Pi to settle its state before fetching
+        setTimeout(() => {
+          fetchDashboardData();
+        }, 300);
+      } else if (action === "refresh_logs" || action === "food_low" || action === "food_refilled") {
       // Re-run the fetch to update the stats cards automatically
       fetchDashboardData();
     }
@@ -187,7 +209,7 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
     });
 
     return unsubscribe;
-  }, []);
+  }, [fetchDashboardData]);
 
   const handleUploadPicture = async () => {
     setShowImageOptions(false);
@@ -198,7 +220,6 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
 
     if (!result.canceled) {
       // Navigate to Edit screen with the new image
-      // Assuming you've added "editImage" to your navigation logic
       onNavigate(`editImage?uri=${encodeURIComponent(result.assets[0].uri)}`);
     }
   };
@@ -220,7 +241,7 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
     
     return {
       label: `${lastFeeding.pet}`,
-      value: `${lastFeeding.time}`,
+      value: `${lastFeeding.date}`,
       color: isOld ? "#EF4444" : "#81C784" 
     };
   };
@@ -231,7 +252,7 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
   const stats = [
     { 
       id: "last", 
-      icon: Utensils, 
+      icon: UtensilsCrossed, 
       label: "Last Feeding", 
       value: lastFeedingInfo.label === "No data" 
         ? "No data" 
@@ -239,59 +260,85 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
       color: lastFeedingInfo.color 
     },
     { 
-      id: "next", // Added ID to identify the specific card
+      id: "next", // ID to identify the specific card
       icon: Clock, 
       label: "Next Scheduled", 
       value: `${nextFeeding.label} • ${nextFeeding.time}`, 
       color: "#5C6BC0" 
     },
     { 
-      id: "remaining", // This is your Bottom Right item
+      id: "remaining",
       icon: BarChart3, 
       label: "Food Level", 
       value: foodLevel === "low" ? "Low" : "Normal", 
       color: foodLevel === "low" ? "#EF4444" : "#81C784" // Red if low, Green if normal
     },
-    { id: "status", icon: Wifi, label: "Feeder Status", value: "Online", color: "#64B5F6" },
+    { 
+    id: "status", 
+    icon: isConnected ? Wifi : WifiOff, 
+    label: "Feeder Status", 
+    value: isConnected ? "Online" : "Offline", 
+    color: isConnected ? "#64B5F6" : "#EF4444" 
+    },
   ];
 
   const handleInstantFeed = async () => {
-  if (!petName.trim()) {
-    Alert.alert("Missing Info", "Please enter a pet name.");
-    return;
-  }
+    if (!petName.trim() || !selectedPetId) {
+      Alert.alert("Missing Info", "Please select a pet.");
+      return;
+    }
 
-  // 1. Calculate time: 15 seconds in the future
-  const futureDate = new Date(Date.now() + 15000);
-  const timeStr = futureDate.toLocaleTimeString([], { 
-    hour: '2-digit', 
-    minute: '2-digit', 
-    hour12: false 
-  });
-
-  // 2. Convert grams to seconds (Math.floor to match Pi logic)
-  const durationSeconds = Math.floor(portion / GRAMS_PER_SECOND);
-
-  try {
-    const response = await fetch(`${RPI_URL}/add-schedule`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        time_of_day: timeStr,
-        pet_name: petName,
-        seconds: durationSeconds
-      })
+    // 1. Calculate time: 15 seconds in the future
+    const futureDate = new Date(Date.now() + 15000);
+    const timeStr = futureDate.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      hour12: false 
     });
 
-    if (response.ok) {
-      Alert.alert("Success", `Feeding ${petName} ${portion}g at ${timeStr}`);
-      setShowFeedModal(false);
-      setPetName(""); // Reset for next time
+    // Convert grams to seconds (Math.floor to match Pi logic)
+    const durationSeconds = Math.floor(portion / GRAMS_PER_SECOND);
+
+    try {
+      const response = await fetch(`${RPI_URL}/add-schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          time_of_day: timeStr,
+          pet_name: petName,
+          pet_id: selectedPetId, // New field
+          seconds: durationSeconds
+        })
+      });
+
+      if (response.ok) {
+        Alert.alert("Success", `Feeding ${petName} ${portion}g at ${timeStr}`);
+        setShowFeedModal(false);
+        setPetName(""); // Reset for next time
+        setSelectedPetId(null); // Reset
+      }
+    } catch (e) {
+      Alert.alert("Connection Error", "Could not reach the feeder.");
     }
-  } catch (e) {
-    Alert.alert("Connection Error", "Could not reach the feeder.");
-  }
-};
+  };
+
+  const toggleCamera = async () => {
+    try {
+      const newState = !camEnabled;
+      const response = await fetch(`${RPI_URL}/set-camera`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newState }),
+      });
+
+      if (response.ok) {
+        setCamEnabled(newState);
+      }
+    } catch (error) {
+      console.error("Failed to toggle camera:", error);
+      Alert.alert("Error", "Could not connect to the Pi to toggle camera.");
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -330,26 +377,28 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
             style={styles.liveCard}
           >
             <Image source={{ uri: liveCardImage }} style={styles.liveImage} />
-            {isCameraRunning && (
-            <MotiView 
-              from={{ opacity: 0 }} 
-              animate={{ opacity: 1 }}
-              style={styles.liveBadge}
-            >
-              <MotiView
-                from={{ scale: 1, opacity: 1 }}
-                animate={{ scale: 1.2, opacity: 0.5 }}
-                transition={{
-                  type: 'timing',
-                  duration: 600,
-                  loop: true,
-                  repeatReverse: true,
-                }}
-                style={styles.liveDot}
-              />
-              <Text style={styles.liveText}>LIVE</Text>
-            </MotiView>
-  )}
+            <AnimatePresence>
+              {isCameraRunning && (
+                <MotiView 
+                  from={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }}
+                  style={styles.liveBadge}
+                >
+                  <MotiView
+                    from={{ scale: 1, opacity: 1 }}
+                    animate={{ scale: 1.2, opacity: 0.5 }}
+                    transition={{
+                      type: 'timing',
+                      duration: 600,
+                      loop: true,
+                      repeatReverse: true,
+                    }}
+                    style={styles.liveDot}
+                  />
+                  <Text style={styles.liveText}>LIVE</Text>
+                </MotiView>
+              )}
+            </AnimatePresence>
             <View style={styles.playOverlay}>
               <View style={styles.playBtnCircle}>
                 <Video size={32} color="#5C6BC0" />
@@ -363,8 +412,10 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
           {stats.map((stat, i) => (
             <TouchableOpacity
               key={stat.id}
-              disabled={stat.id !== "next"} // Only the 'next' card is clickable for now
-              onPress={() => stat.id === "next" && onNavigate("pets")}
+              onPress={() => {
+                if (stat.id === "next") onNavigate("pets");
+                if (stat.id === "status") fetchDashboardData();
+              }}
               activeOpacity={0.7}
               style={styles.statCardWrapper} // Use a wrapper for the animation
             >
@@ -386,10 +437,11 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
 
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
+        
         <TouchableOpacity 
           activeOpacity={0.7}
           style={styles.actionCard}
-          onPress={() => onNavigate("schedules")} // Triggers navigation to the new screen
+          onPress={() => onNavigate("schedules")}
         >
           <View>
             <Text style={styles.actionTitle}>View Schedule</Text>
@@ -399,22 +451,35 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
             <Text style={styles.actionBtnText}>Schedule</Text>
           </View>
         </TouchableOpacity>
-      </ScrollView>
 
-      {/* Floating Action Button */}
-      <MotiView 
-        from={{ scale: 0 }} 
-        animate={{ scale: 1 }} 
-        transition={{ type: 'spring', delay: 500 }}
-        style={styles.fabWrapper}
-      >
-        <TouchableOpacity 
-          style={styles.fab} 
-          onPress={() => setShowFeedModal(true)}
-        >
-          <Utensils size={28} color="white" />
-        </TouchableOpacity>
-      </MotiView>
+        {/* New Button Grid below Schedule */}
+        <View style={styles.actionGrid}>
+          {/* Camera Master Toggle */}
+          <TouchableOpacity 
+            activeOpacity={0.8}
+            style={[
+              styles.gridBtn, 
+              { backgroundColor: camEnabled ? '#81C784' : '#EF4444' }
+            ]}
+            onPress={toggleCamera}
+          >
+            {camEnabled ? (
+              <Camera color="white" size={32} />
+            ) : (
+              <CameraOff color="white" size={32} />
+            )}
+          </TouchableOpacity>
+
+          {/* Feed Modal Button */}
+          <TouchableOpacity 
+            activeOpacity={0.8}
+            style={[styles.gridBtn, { backgroundColor: '#FFB74D' }]}
+            onPress={() => setShowFeedModal(true)}
+          >
+            <Utensils size={32} color="white" />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
 
       {/* Image Selection Modal (Pop up) */}
       <Modal visible={showImageOptions} transparent animationType="fade">
@@ -459,13 +524,36 @@ export function HomeDashboard({ onNavigate, routeParams }: { onNavigate: any, ro
                 <Text style={styles.modalTitle}>Feed Now</Text>
                 
                 {/* Pet Name Entry */}
-                <TextInput
-                  style={styles.petInput}
-                  placeholder="Enter Pet Name"
-                  value={petName}
-                  onChangeText={setPetName}
-                  placeholderTextColor="#9CA3AF"
-                />
+                <Text style={[styles.modalSub, { marginBottom: 10 }]}>Select Pet</Text>
+                <View style={styles.petSelectorContainer}>
+                  {storedPets.length > 0 ? (
+                    storedPets.map((pet) => (
+                      <TouchableOpacity
+                        key={pet.id}
+                        onPress={() => {
+                          setPetName(pet.name);
+                          setSelectedPetId(pet.id); // Capture the ID
+                        }}
+                        style={[
+                          styles.petChip,
+                          petName === pet.name && styles.petChipActive
+                        ]}
+                      >
+                        {pet.image && (
+                          <Image source={{ uri: pet.image }} style={styles.petChipImage} />
+                        )}
+                        <Text style={[
+                          styles.petChipText,
+                          petName === pet.name && styles.petChipTextActive
+                        ]}>
+                          {pet.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <Text style={styles.noPetsText}>No pets found. Add one in Settings!</Text>
+                  )}
+                </View>
 
                 <Text style={styles.modalSub}>Select portion size</Text>
                 
@@ -537,7 +625,7 @@ const styles = StyleSheet.create({
   },
   cancelTextLarge: {
     color: '#6B7280',
-    fontSize: 18, // Slightly bigger as requested
+    fontSize: 18,
     fontWeight: '500',
   },
   greeting: { color: 'white', fontSize: 20, fontWeight: 'bold' },
@@ -600,7 +688,6 @@ const styles = StyleSheet.create({
   dispenseBtnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   cancelBtn: { marginTop: 12, alignItems: 'center' },
   cancelText: { color: '#9CA3AF' },
-  // Find this in your StyleSheet
   bottomNav: {
     position: 'absolute',
     bottom: 0,
@@ -639,5 +726,62 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     color: '#1F2937',
     fontWeight: '500',
-  }
+  },
+  actionGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  gridBtn: {
+    flex: 1,
+    height: 100, // Matching the height feel of your stats cards
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 4, // Space between the two buttons
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  petSelectorContainer: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+    flexWrap: 'wrap',
+  },
+  petChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 100,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  petChipActive: {
+    borderColor: '#5C6BC0',
+    backgroundColor: '#EEF2FF',
+  },
+  petChipImage: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 8,
+  },
+  petChipText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  petChipTextActive: {
+    color: '#5C6BC0',
+  },
+  noPetsText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
 });

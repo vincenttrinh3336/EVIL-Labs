@@ -50,7 +50,7 @@ const chartConfig = {
   propsForDots: { r: "4", strokeWidth: "2", stroke: "#5C6BC0" }
 };
 
-export function AnalyticsScreen({ 
+export function AnalyticsTestScreen({ 
   onBack, 
   onNavigate // Add this prop
 }: { 
@@ -145,9 +145,6 @@ export function AnalyticsScreen({
         {/* Export Button */}
         <TouchableOpacity 
           style={styles.exportBtn} 
-          onLongPress={() => onNavigate("analyticsTest")} // Triggers navigation to the report copy
-          delayLongPress={500} // Standard long-press delay
-          activeOpacity={0.7}
         >
           <Download size={20} color="white" />
           <Text style={styles.exportBtnText}>Share Report (PDF)</Text>

@@ -1,56 +1,131 @@
 import React, { useState } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, Dimensions } from "react-native";
+import { 
+  StyleSheet, View, Text, TouchableOpacity, Dimensions, 
+  TextInput, Image, Alert, ScrollView 
+} from "react-native";
 import { MotiView, AnimatePresence } from "moti";
-import { Clock, Video, TrendingUp, ChevronRight } from "lucide-react-native";
+import { Clock, TrendingUp, ChevronRight, Plus, Minus, Camera } from "lucide-react-native";
+import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get("window");
 
-interface OnboardingScreensProps {
-  onComplete: () => void;
+interface PetData {
+  id: string; // Permanent unique ID
+  name: string;
+  image: string | null;
 }
 
-const slides = [
-  {
-    icon: Clock,
-    title: "Feed Smarter",
-    description: "Automate feeding schedules and never miss a meal. Set custom portions and times for your pets.",
-    color: "#5C6BC0",
-  },
-  {
-    icon: Video,
-    title: "Stay Connected",
-    description: "Watch your pets eat with live video feed. Dispense food remotely with just a tap.",
-    color: "#FFB74D",
-  },
-  {
-    icon: TrendingUp,
-    title: "Track Nutrition",
-    description: "Monitor feeding patterns and track your pet's health with detailed analytics and history.",
-    color: "#81C784",
-  },
-];
-
-export function OnboardingScreens({ onComplete }: OnboardingScreensProps) {
+export function OnboardingScreens({ onComplete }: { onComplete: () => void }) {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [pets, setPets] = useState<PetData[]>([
+    { 
+      id: `initial-${Date.now()}`, 
+      name: "", 
+      image: null 
+    }
+  ]);
 
-  const handleNext = () => {
-    if (currentSlide < slides.length - 1) {
-      setCurrentSlide(currentSlide + 1);
-    } else {
-      onComplete();
+  const slides = [
+    {
+      icon: Clock,
+      title: "Feed Smarter and Stay Connected",
+      description: "Set custom portions and feeding times for your pets, view video clips, and dispense with just a tap.",
+      color: "#5C6BC0",
+    },
+    {
+      icon: TrendingUp,
+      title: "Track Nutrition",
+      description: "Monitor feeding patterns and track your pet's health with detailed analytics and history.",
+      color: "#81C784",
+    },
+    {
+      title: "Your Pet Family",
+      description: "The app allows at least 1 and at most 3 unique pets. Set their info now or later in Settings.",
+      isPetGrid: true,
+    }
+  ];
+
+  const handleAddPet = () => {
+    if (pets.length < 3) {
+      const newPet: PetData = {
+        // Create a unique ID: timestamp + random string
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: "",
+        image: null 
+      };
+      setPets([...pets, newPet]);
     }
   };
 
+  const handleRemovePet = () => {
+    if (pets.length > 1) setPets(pets.slice(0, -1));
+  };
+
+  const pickImage = async (index: number) => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1], // Square crop as requested
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      const newPets = [...pets];
+      newPets[index].image = result.assets[0].uri;
+      setPets(newPets);
+    }
+  };
+
+  const updateName = (text: string, index: number) => {
+    const newPets = [...pets];
+    newPets[index].name = text;
+    setPets(newPets);
+  };
+
+  const handleFinalize = async () => {
+    try {
+      await AsyncStorage.setItem('stored_pets', JSON.stringify(pets));
+      onComplete();
+    } catch (e) {
+      Alert.alert("Error", "Could not save pet data.");
+    }
+  };
+
+  const renderPetGrid = () => (
+    <View style={styles.gridWrapper}>
+      <View style={styles.gridControls}>
+        <TouchableOpacity onPress={handleRemovePet} style={styles.controlBtn}><Minus color="#EF4444" /></TouchableOpacity>
+        <TouchableOpacity onPress={handleAddPet} style={styles.controlBtn}><Plus color="#5C6BC0" /></TouchableOpacity>
+      </View>
+      <ScrollView contentContainerStyle={styles.gridBody}>
+        {pets.map((pet, index) => (
+          <View key={index} style={styles.gridRow}>
+            <TextInput 
+              style={styles.nameInput} 
+              placeholder={`Pet ${index + 1} Name`}
+              value={pet.name}
+              onChangeText={(t) => updateName(t, index)}
+            />
+            <TouchableOpacity style={styles.imageBox} onPress={() => pickImage(index)}>
+              {pet.image ? (
+                <Image source={{ uri: pet.image }} style={styles.petThumb} />
+              ) : (
+                <Camera color="#9CA3AF" />
+              )}
+            </TouchableOpacity>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
-      {/* Skip button - Replaces the top div */}
       <View style={styles.skipContainer}>
-        <TouchableOpacity onPress={onComplete}>
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
+        <TouchableOpacity onPress={onComplete}><Text style={styles.skipText}>Skip</Text></TouchableOpacity>
       </View>
 
-      {/* Slides Container */}
       <View style={styles.contentContainer}>
         <AnimatePresence exitBeforeEnter>
           <MotiView
@@ -58,60 +133,30 @@ export function OnboardingScreens({ onComplete }: OnboardingScreensProps) {
             from={{ opacity: 0, translateX: 50 }}
             animate={{ opacity: 1, translateX: 0 }}
             exit={{ opacity: 0, translateX: -50 }}
-            transition={{ type: 'timing', duration: 300 }}
             style={styles.slide}
           >
-            {/* Animated Icon Circle */}
-            <MotiView 
-              from={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', delay: 200 }}
-              style={[styles.iconCircle, { backgroundColor: slides[currentSlide].color }]}
-            >
-              {React.createElement(slides[currentSlide].icon, {
-                size: 64,
-                color: "#FFFFFF",
-              })}
-            </MotiView>
-
+            {!slides[currentSlide].isPetGrid && (
+              <View style={[styles.iconCircle, { backgroundColor: slides[currentSlide].color }]}>
+                {React.createElement(slides[currentSlide].icon as any, { size: 64, color: "#FFF" })}
+              </View>
+            )}
+            
             <Text style={styles.title}>{slides[currentSlide].title}</Text>
-            <Text style={styles.description}>
-              {slides[currentSlide].description}
-            </Text>
+            <Text style={styles.description}>{slides[currentSlide].description}</Text>
+            
+            {slides[currentSlide].isPetGrid && renderPetGrid()}
           </MotiView>
         </AnimatePresence>
       </View>
 
-      {/* Pagination dots - Clickable like your original */}
-      <View style={styles.paginationRow}>
-        {slides.map((_, index) => (
-          <TouchableOpacity 
-            key={index} 
-            onPress={() => setCurrentSlide(index)}
-          >
-            <View
-              style={[
-                styles.dot,
-                index === currentSlide ? styles.activeDot : styles.inactiveDot,
-              ]}
-            />
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Bottom Continue Button */}
       <View style={styles.footer}>
         <TouchableOpacity 
-          onPress={handleNext} 
-          activeOpacity={0.8}
+          onPress={currentSlide === slides.length - 1 ? handleFinalize : () => setCurrentSlide(currentSlide + 1)} 
           style={styles.primaryButton}
         >
           <Text style={styles.primaryButtonText}>
             {currentSlide < slides.length - 1 ? "Continue" : "Get Started"}
           </Text>
-          {currentSlide < slides.length - 1 && (
-            <ChevronRight size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
-          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -119,94 +164,24 @@ export function OnboardingScreens({ onComplete }: OnboardingScreensProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-  skipContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 24,
-    paddingTop: 12,
-  },
-  skipText: {
-    color: "#666",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  contentContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  slide: {
-    alignItems: "center",
-    width: width,
-    paddingHorizontal: 24,
-  },
-  iconCircle: {
-    width: 128,
-    height: 128,
-    borderRadius: 64,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 32,
-    // Android Shadow
-    elevation: 10,
-    // iOS Shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#1A1A1A",
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  description: {
-    fontSize: 17,
-    color: "#666",
-    textAlign: "center",
-    lineHeight: 26,
-  },
-  paginationRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 4,
-    transition: 'all',
-  },
-  activeDot: {
-    width: 32,
-    backgroundColor: "#5C6BC0",
-  },
-  inactiveDot: {
-    width: 8,
-    backgroundColor: "#E0E0E0",
-  },
-  footer: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  primaryButton: {
-    backgroundColor: "#5C6BC0",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 20,
-    borderRadius: 100,
-  },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "600",
-  },
+  container: { flex: 1, backgroundColor: "#FFF" },
+  skipContainer: { padding: 20, alignItems: 'flex-end' },
+  skipText: { color: "#666", fontSize: 16 },
+  contentContainer: { flex: 1, justifyContent: "center" },
+  slide: { width: width, paddingHorizontal: 24, alignItems: "center" },
+  iconCircle: { width: 128, height: 128, borderRadius: 64, justifyContent: "center", alignItems: "center", marginBottom: 32 },
+  title: { fontSize: 28, fontWeight: "bold", textAlign: "center", marginBottom: 12 },
+  description: { fontSize: 16, color: "#666", textAlign: "center", marginBottom: 20 },
+  footer: { padding: 24, paddingBottom: 40 },
+  primaryButton: { backgroundColor: "#5C6BC0", padding: 18, borderRadius: 100, alignItems: "center" },
+  primaryButtonText: { color: "#FFF", fontWeight: "600", fontSize: 18 },
+  // Grid Styles
+  gridWrapper: { width: '100%', marginTop: 20 },
+  gridControls: { flexDirection: 'row', gap: 20, marginBottom: 10 },
+  controlBtn: { padding: 10, backgroundColor: '#F3F4F6', borderRadius: 12 },
+  gridBody: { gap: 12 },
+  gridRow: { flexDirection: 'row', gap: 10, height: 80 },
+  nameInput: { flex: 2, backgroundColor: '#F3F4F6', borderRadius: 15, paddingHorizontal: 15, fontSize: 16 },
+  imageBox: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 15, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  petThumb: { width: '100%', height: '100%' }
 });

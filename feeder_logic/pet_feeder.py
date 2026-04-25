@@ -9,7 +9,7 @@ from threading import Thread, Lock
 
 # Dependencies for receival of schedule updates (FastAPI, sqlite3)
 import sqlite3
-from fastapi import FastAPI, HTTPException  # pip install fastapi uvicorn
+from fastapi import FastAPI, HTTPException, Query  # pip install fastapi uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -74,10 +74,8 @@ args = None
 
 feeding_times = []
 lowfood = False # True if food level is low, else False
-vision_active = False   # True if CV model should be running (depends on cam_state)
 vision_stop_time = 0
 lock = Lock()
-cam_state = True
 last_dispense_time = ""
 servo_angle = -240
 
@@ -85,13 +83,22 @@ servo = None
 sensor = None
 pir = None
 
+class FeederState:
+    def __init__(self):
+        self.cv_on = False
+        self.cam_state = True
+        self.vision_active = False  # True if CV model should be running (depends on cam_state)
+
+# Create a single instance to be used everywhere
+shared_state = FeederState()
+
 # This function will be called by main() once to safely set up hardware
 def initialize_hardware():
     global servo, sensor, pir
     try:
         if servo is None:
             servo = Servo(27)
-            servo.value = 0.2
+            servo.value = 1.0
         if sensor is None:
             sensor = DistanceSensor(echo=24, trigger=23)
         if pir is None:
@@ -547,26 +554,23 @@ def levelCheck():
 
 
 def getSchedule():
-    conn = sqlite3.connect("feeder_schedule.db")
-    cursor = conn.execute("SELECT time, pet, seconds FROM schedules")
+    conn = sqlite3.connect(DB_PATH) # Using DB_PATH for consistency
+    cursor = conn.execute("SELECT time, pet, pet_id, seconds FROM schedules")
     data = cursor.fetchall()
     conn.close()
-    return data # list of tuples, (Time, Pet name, Seconds)
+    return data # (Time, Pet name, Pet ID, Seconds)
 
 
-def dispenseFood(time_str, pet, duration):
-    global cam_state, servo_angle, servo, sensor
-    feed_time = time_str
-    pet_name = pet
-    wait_time = float(duration) # Convert to float
-    print("Dispensing food...")
+def dispenseFood(time_str, pet, pet_id, duration):
+    global servo_angle, servo
+    wait_time = float(duration)
+    print(f"Dispensing food for {pet} (ID: {pet_id})...")
 
-    # Store original position before moving
     original_value = servo.value
-
+    
     # Clamp angle to valid range (0-360)
     clamped_angle = max(0, min(360, servo_angle))
-
+    
     # Convert angle (0–360) to gpiozero range (-1 to 1)
     value = (clamped_angle / 180) - 1  # 0°=-1, 180°=0, 360°=1
 
@@ -580,47 +584,49 @@ def dispenseFood(time_str, pet, duration):
 
     # Stop sending signal (prevents jitter)
     servo.detach()
-    print(f"{feed_time} feeding for {pet_name} dispensed!")    # NOTIFY APP
-
-    # 1. Log to Database
-    log_feeding(time_str, pet, duration)
+    print(f"{time_str} feeding for {pet} dispensed!")    # NOTIFY APP
+        
+    # 1. Log to Database with ID
+    log_feeding(time_str, pet, pet_id, duration)
 
     # 2. Notify App via Firebase
     send_push_notification(
         title="Food Dispensed!",
-        body=f"{pet_name} has been fed their {feed_time} meal.",
-        data_payload={"action": "refresh_logs"} # Tells the app to update the list
+        body=f"{pet} has been fed their {time_str} meal.",
+        data_payload={"action": "refresh_logs"}
     )
 
     levelCheck()
-    if cam_state:
+    if shared_state.cam_state:
         activateVision()
 
 
 def onMotion():
-    global lock, cam_state
+    global lock
     print("Motion detected!")
     
     with lock:
-        active = vision_active
+        active = shared_state.vision_active
+        # Check cv_on to ensure the previous loop has finished cleaning up
+        currently_cleaning = shared_state.cv_on 
+        user_enabled = shared_state.cam_state
     
-    if not active and cam_state:
+    if not active and not currently_cleaning and user_enabled:
         activateVision()
+    else:
+        print("Motion ignored: System busy cleaning up or disabled by user.")
 
 
 def schedulerLoop():
     global last_dispense_time
     while True:
         now = time.strftime("%H:%M")
-        
         if now != last_dispense_time:
-            # Freshly fetch the list from the DB in case the app changed something
             schedules = getSchedule()
-            for time_str, pet, duration in schedules:
+            for time_str, pet, pet_id, duration in schedules: # Unpack pet_id
                 if time_str == now:
-                    dispenseFood(time_str, pet, duration)
+                    dispenseFood(time_str, pet, pet_id, duration) # Pass pet_id
                     last_dispense_time = now
-        
         time.sleep(10)
 
 
@@ -630,11 +636,11 @@ class CameraToggle(BaseModel):
 
 
 def activateVision():
-    global vision_active, vision_stop_time, lock, cam_state
+    global vision_stop_time, lock
     
-    if cam_state:
+    if shared_state.cam_state:
         with lock:
-            vision_active = True
+            shared_state.vision_active = True
             vision_stop_time = time.time() + (30 * 60)  # 30 minutes
     
         print("Vision activated for 30 minutes")
@@ -673,12 +679,20 @@ def cleanup_old_videos(days_to_keep=3):
         print(f"Error during video cleanup: {e}")
 
 
-# To convert cached video clip of pet into a mp4 for transfer
-def save_and_send_clip(frames):
+#    To convert cached video clip of pet into a mp4 for transfer
+def save_and_send_clip(frames, thumbnail_frame=None):
     """
     Converts a list of frames into an .mp4 video and notifies the app.
     """
+    if not frames or len(frames) == 0:
+        print("Error: No valid frames provided to save_and_send_clip")
+        return
+
+    # Filter out any accidentally appended None or empty frames
+    frames = [f for f in frames if f is not None and hasattr(f, 'shape')]
+
     if not frames:
+        print("Error: All frames were invalid.")
         return
 
     # 1. Define the filename and path
@@ -703,7 +717,12 @@ def save_and_send_clip(frames):
         for frame in frames:
             out.write(frame)
         out.release()
-        cv2.imwrite(video_path.replace(".mp4", ".jpg"), frames[0])
+        # Use thumbnail_frame if provided, else fallback to first frame
+        final_thumbnail = thumbnail_frame if thumbnail_frame is not None else frames[0]
+        
+        # Convert to BGR for OpenCV saving
+        thumb_bgr = cv2.cvtColor(final_thumbnail, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(video_path.replace(".mp4", ".jpg"), thumb_bgr)
         print(f"Video saved successfully at {video_path}")
 
         # 4. Notify the App via Firebase
@@ -726,7 +745,7 @@ def save_and_send_clip(frames):
 
 # Runs the tflite model based on cam_state and if current_time <= current_stop_limit
 def run_detection_loop(camera, detector, args, stop_time):
-    global vision_stop_time, lock, cam_state
+    global vision_stop_time, lock
     # Initialize local loop variables
     fps_counter = 0
     fps_start_time = time.time()
@@ -734,6 +753,15 @@ def run_detection_loop(camera, detector, args, stop_time):
     low_fps_warning_shown = False
     no_detection_count = 0
     no_detection_warning_interval = 100
+    clip_recorded = False
+    best_thumbnail = None  # NEW: To store best detected frame
+    max_confidence = 0     # NEW: To track the best detection
+
+    with lock:
+        shared_state.cv_on = True
+    #print(f"Vision Loop: {shared_state.cv_on=}")
+    time.sleep(0.1) # Ensure global state is synchronized
+    send_push_notification(data_payload={"action": "vision_toggle"})    # Silent notification
 
     # Initialize buffers
     # Loop usually runs at 1.6 fps. 30 frame buffer = 20 seconds of real time video
@@ -755,14 +783,12 @@ def run_detection_loop(camera, detector, args, stop_time):
             # We check the GLOBAL stop_time in case activateVision() updated it
             with lock:
                 current_stop_limit = vision_stop_time
-                current_cam_state = cam_state
+                current_cam_state = shared_state.cam_state
 
-            if current_time > current_stop_limit:
-                print("30 minutes elapsed. Closing detection loop...")
-                break # This exits the function and returns to visionLoop's 'finally' block
+            cv_off = ((current_time > current_stop_limit) or (current_cam_state == False) or clip_recorded)
 
-            if current_cam_state == False:
-                print("CV deactivated by user. Closing detection loop...")
+            if cv_off:
+                print("Closing detection loop...")
                 break # This exits the function and returns to visionLoop's 'finally' block
 
             # Capture frame
@@ -776,6 +802,22 @@ def run_detection_loop(camera, detector, args, stop_time):
             detections = detector.detect(frame_bgr)
             
             if len(detections) > 0:
+                # Use a safer way to get the best confidence
+                try:
+                    # Filter out any detections that might have missing confidence
+                    valid_detections = [det for det in detections if hasattr(det, 'confidence')]
+                    
+                    if valid_detections:
+                        # Sort by confidence descending and take the first one
+                        best_det = sorted(valid_detections, key=lambda x: x.confidence, reverse=True)[0]
+                        current_max = best_det.confidence
+                        
+                        if current_max > max_confidence:
+                            max_confidence = current_max
+                            best_thumbnail = frame.copy()
+                except (IndexError, AttributeError) as e:
+                    print(f"Non-fatal detection error: {e}")
+
                 current_t = time.time()
                 detection_timestamps.append(current_t)
                 
@@ -785,18 +827,20 @@ def run_detection_loop(camera, detector, args, stop_time):
                 
                 # 3. Check the trigger condition
                 if len(detection_timestamps) >= 4 and len(video_cache) > 30:
-                    print("Pet detected! Recording 8 more seconds of footage...")
-                    # Record for 5 more seconds (roughly 8 more frames at 1.6 FPS)
+                    print("Pet detected! Recording 8 more seconds...")
                     for _ in range(13):
-                        frame = camera.capture_array()
-                        video_cache.append(frame.copy())
-                        sleep(0.5) # Small delay to match your processing speed
+                        new_frame = camera.capture_array()
+                        if new_frame is not None and new_frame.size > 0: # Ensure frame exists
+                            video_cache.append(new_frame.copy())
+                        else:
+                            print("Warning: Camera missed a frame.")
+                        sleep(0.5)
 
                     print("Saving full clip.")
-                    save_and_send_clip(list(video_cache)) # Function to stitch and send
+                    save_and_send_clip(list(video_cache), best_thumbnail) # Function to stitch and send
                     
                     with lock:
-                        cam_state = False # Stop the model/loop
+                        clip_recorded = True # Stop the model/loop
                     break
 
             # Track no detections
@@ -857,13 +901,13 @@ def run_detection_loop(camera, detector, args, stop_time):
 
 # Runs in a thread - sets up camera and calls run_detection_loop based on vision_active and cam_state
 def visionLoop(detector, args):
-    global vision_active, vision_stop_time, lock, cam_state
+    global vision_stop_time, lock
 
     while True:
         with lock:
-            active = vision_active
+            active = shared_state.vision_active
             stop_time = vision_stop_time
-            cam = cam_state
+            cam = shared_state.cam_state
 
         if active and cam:
             print(f"Vision Active. Target stop time: {time.ctime(stop_time)}")
@@ -897,11 +941,18 @@ def visionLoop(detector, args):
             finally:
                 # 3. CLEANUP: Shut down camera so it's ready for next time
                 print("Deactivating Vision... Cleaning up resources.")
-                camera.stop()
+                if 'camera' in locals():
+                    try:
+                        camera.stop()
+                        camera.close() # Release hardware
+                    except Exception as e:
+                        print(f"Error during hardware release: {e}")
                 cv2.destroyAllWindows()
                 with lock:
-                    vision_active = False
+                    shared_state.cv_on = False
+                    shared_state.vision_active = False
                 print("Vision deactivated")
+                send_push_notification(data_payload={"action": "vision_toggle"})    # Silent notification
 
         time.sleep(1) # Poll every second to save CPU
 
@@ -910,6 +961,7 @@ def visionLoop(detector, args):
 class ScheduleEntry(BaseModel):
     time_of_day: str  # e.g., "14:30"
     pet_name: str
+    pet_id: str  # Added this field
     seconds: int
 
 # Database where feeedings, logs, and variable statuses are stored
@@ -917,15 +969,31 @@ def init_db():
     global DB_PATH
     conn = sqlite3.connect(DB_PATH)
     conn.execute('''CREATE TABLE IF NOT EXISTS schedules 
-                    (id INTEGER PRIMARY KEY, time TEXT, pet TEXT, seconds INTEGER)''')
+                    (id INTEGER PRIMARY KEY, 
+                     time TEXT, 
+                     pet TEXT, 
+                     pet_id TEXT, 
+                     seconds INTEGER)''')
+    # Check if pet_id column exists (in case table was already created)
+    cursor = conn.execute("PRAGMA table_info(schedules)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if "pet_id" not in columns:
+        conn.execute("ALTER TABLE schedules ADD COLUMN pet_id TEXT")
     conn.execute('CREATE TABLE IF NOT EXISTS status (key TEXT PRIMARY KEY, value TEXT)')
     conn.execute('INSERT OR IGNORE INTO status (key, value) VALUES ("food_level", "normal")')
     conn.execute('''CREATE TABLE IF NOT EXISTS feeding_log 
-                    (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                     actual_timestamp DATETIME, 
-                     scheduled_time TEXT, 
-                     pet_name TEXT, 
-                     duration INTEGER)''')
+                (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                 actual_timestamp DATETIME, 
+                 scheduled_time TEXT, 
+                 pet_name TEXT, 
+                 pet_id TEXT, 
+                 duration INTEGER)''')
+
+    # Migration check for existing logs
+    cursor = conn.execute("PRAGMA table_info(feeding_log)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if "pet_id" not in columns:
+        conn.execute("ALTER TABLE feeding_log ADD COLUMN pet_id TEXT")
     conn.commit()
     conn.close()
 
@@ -938,12 +1006,14 @@ def update_db_food_status(status):
 
 
 # Log feeding instance into database
-def log_feeding(time_str, pet, duration):
+def log_feeding(time_str, pet, pet_id, duration):
     conn = sqlite3.connect(DB_PATH)
     # Log the exact moment it happened + the scheduled info
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    conn.execute("INSERT INTO feeding_log (actual_timestamp, scheduled_time, pet_name, duration) VALUES (?, ?, ?, ?)",
-                 (now, time_str, pet, duration))
+    conn.execute("""INSERT INTO feeding_log 
+                    (actual_timestamp, scheduled_time, pet_name, pet_id, duration) 
+                    VALUES (?, ?, ?, ?, ?)""",
+                 (now, time_str, pet, pet_id, duration))
     
     # Optional: Auto-delete logs older than 7 days to keep the DB clean
     seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
@@ -955,20 +1025,20 @@ def log_feeding(time_str, pet, duration):
 
 # Update cam_state to match database value upon startup
 def load_settings():
-    global cam_state
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.execute('SELECT value FROM status WHERE key = "camera_enabled"')
     row = cursor.fetchone()
     if row:
-        cam_state = (row[0] == 'True') # Convert string back to boolean
+        shared_state.cam_state = (row[0] == 'True') # Convert string back to boolean
     conn.close()
 
 
 @app.post("/add-schedule")  # Check if app is initialized in proper scope
-async def add_schedule(entry: ScheduleEntry):
+async def add_schedule(entry: ScheduleEntry):  
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("INSERT INTO schedules (time, pet, seconds) VALUES (?, ?, ?)",
-                 (entry.time_of_day, entry.pet_name, entry.seconds))
+    # Include entry.pet_id in the INSERT
+    conn.execute("INSERT INTO schedules (time, pet, pet_id, seconds) VALUES (?, ?, ?, ?)",
+                 (entry.time_of_day, entry.pet_name, entry.pet_id, entry.seconds))
     conn.commit()
     conn.close()
     return {"status": "success"}
@@ -988,11 +1058,46 @@ async def delete_schedule(id: int):
 @app.get("/get-schedules")
 async def get_schedules():
     conn = sqlite3.connect(DB_PATH)
-    # Added 'id' to the selection
-    cursor = conn.execute("SELECT id, time, pet, seconds FROM schedules")
+    # Include pet_id in the SELECT
+    cursor = conn.execute("SELECT id, time, pet, pet_id, seconds FROM schedules")
     rows = cursor.fetchall() 
     conn.close()
-    return rows # Format: [id, time, pet, seconds]
+    return rows # Format: [id, time, pet, pet_id, seconds]
+
+
+# To get next feeding schedule
+@app.get("/get-next-schedules")
+async def get_next_schedules(next_only: bool = False):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    # Added pet_id to the selection (now index 3)
+    cursor.execute("SELECT id, time, pet, pet_id, seconds FROM schedules")
+    rows = cursor.fetchall() 
+    conn.close()
+
+    if not next_only:
+        return rows
+    
+    if not rows:
+        return []
+    
+    now_str = datetime.now().strftime("%H:%M")
+    # Sort by time (still index 1)
+    rows.sort(key=lambda x: x[1])
+    
+    next_up = next((r for r in rows if r[1] > now_str), rows[0])
+    
+    # Return as a list of dicts (or updated list) for the frontend
+    # If your frontend uses indices, seconds is now index 4 instead of 3
+    return [
+        {
+            "id": next_up[0],
+            "time": next_up[1],
+            "pet": next_up[2],
+            "pet_id": next_up[3],
+            "seconds": next_up[4]
+        }
+    ]
 
 
 # To get the food_level from the database
@@ -1011,11 +1116,10 @@ async def get_food_level():
 # To change cam_state based on user update
 @app.post("/set-camera")
 async def set_camera(status: CameraToggle):
-    global cam_state
     
     # 1. Update the variable with the lock to ensure the vision loop sees it
     with lock:
-        cam_state = status.enabled
+        shared_state.cam_state = status.enabled
     
     # 2. Persist to database (using the existing status table)
     conn = sqlite3.connect(DB_PATH)
@@ -1027,38 +1131,66 @@ async def set_camera(status: CameraToggle):
     return {"message": f"Camera state set to {status.enabled}"}
 
 
-# Provide cam_state and vision_active variables to the server
+# Provide cam_state, vision_active, cv_on variables to the app
 @app.get("/get-status")
 async def get_status():
-    global cam_state, vision_active, lock
-    
+    global lock 
     with lock:
+        #print(f"FastAPI Route: {shared_state.cv_on=}")
         return {
-            "cam_state": cam_state,
-            "vision_active": vision_active
+            "cam_state": shared_state.cam_state,
+            "vision_active": shared_state.vision_active,
+            "cv_on": shared_state.cv_on
         }
     
 
 # GET request that returns the last 7 days of feeding history entries
 @app.get("/feeding-logs")
-async def get_logs():
+async def get_feeding_logs():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.execute("""
-        SELECT id, scheduled_time, pet_name, duration, actual_timestamp 
+        SELECT id, scheduled_time, pet_name, pet_id, duration, actual_timestamp 
         FROM feeding_log 
         ORDER BY actual_timestamp DESC
     """)
     rows = cursor.fetchall()
     conn.close()
     
-    # Convert tuples to list of dicts for easy JSON parsing in React Native
     return [
         {
             "id": r[0],
             "time": r[1], 
             "pet": r[2], 
-            "duration": r[3], 
-            "date": r[4]
+            "pet_id": r[3], # Added pet_id to response
+            "duration": r[4], 
+            "date": r[5]
+        } for r in rows
+    ]
+
+
+# GET request that returns the most recent limit(s) feeding log
+@app.get("/filtered-feeding-logs")
+async def get_filtered_feeding_logs(limit: int = Query(None)):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Explicitly list columns to ensure index consistency
+    query = "SELECT id, actual_timestamp, scheduled_time, pet_name, pet_id, duration FROM feeding_log ORDER BY actual_timestamp DESC"
+    if limit:
+        query += f" LIMIT {limit}"
+        
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [
+        {
+            "id": r[0],
+            "date": r[1],
+            "time": r[2],
+            "pet": r[3], 
+            "pet_id": r[4], # New field added here
+            "duration": r[5], # Index shifted from 4 to 5
         } for r in rows
     ]
 
@@ -1127,25 +1259,30 @@ async def delete_video_file(file_name: str):
     raise HTTPException(status_code=404, detail="File not found")
 
 
-def send_push_notification(title, body, data_payload=None):
+def send_push_notification(title=None, body=None, data_payload=None):
     """
     Sends a flexible push notification via Firebase.
     :param title: The bold header of the notification
     :param body: The main message text
     :param data_payload: Optional dictionary for app logic (e.g., {'type': 'feed_event'})
     """
-    message = messaging.Message(
-        notification=messaging.Notification(
+    # Only include the notification block if title/body are provided
+    notification_obj = None
+    if title or body:
+        notification_obj = messaging.Notification(
             title=title,
             body=body,
-        ),
-        data=data_payload, # Useful for triggering app behavior
+        )
+
+    message = messaging.Message(
+        notification=notification_obj,
+        data=data_payload,  # Useful for triggering app behavior
         topic="feeder_updates",
     )
     
     try:
         response = messaging.send(message)
-        print(f"Successfully sent [{title}]: {response}")
+        print(f"Successfully sent: {response}")
     except Exception as e:
         print(f"Failed to send notification: {e}")
 
@@ -1203,11 +1340,11 @@ def main():
 
 
 if __name__ == '__main__':
-    # Initializeing the hardware, threads, and PIR
+    # Initializing the hardware, threads, and PIR
     main()
 
     # 2. Start the API Server (blocking)
     print("Starting API Server on port 8000...")
-    uvicorn.run("pet_feeder:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
 
 
